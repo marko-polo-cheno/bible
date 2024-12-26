@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://marko-polo-cheno.github.io/pinyin-bible",
+  "homepage": "https://marko-polo-cheno.github.io/bible",
   "scripts": {
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
