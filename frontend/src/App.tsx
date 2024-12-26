@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { Tabs } from '@mantine/core';
-import { BibleNavigator } from './components/BibleNavigator';
+import { BibleNavigator } from './BibleNavigator/BibleNavigator';
 
 function App() {
   return (
