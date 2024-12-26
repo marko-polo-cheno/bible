@@ -1,20 +1,13 @@
 {
-  "name": "thing",
+  "name": "bible",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
   "homepage": "https://marko-polo-cheno.github.io/bible",
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build",
-    "build:with-source-maps": "tsc -b && WITH_SOURCE_MAPS=true vite build",
-    "lint": "eslint '*/**/*.{ts,tsx}' --max-warnings=0 && stylelint '*/**/*.{css,scss}'",
-    "lint:fix": "eslint '*/**/*.{ts,tsx}' --fix; stylelint '*/**/*.{css,scss}' --fix",
-    "lint:staged": "lint-staged",
-    "preview": "vite preview",
-    "test": "jest"
+    "dev": "vite",
+    "build": "vite build",
+    "predeploy": "yarn build",
+    "deploy": "gh-pages -d dist"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
