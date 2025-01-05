@@ -24,7 +24,7 @@ export function BibleNavigator() {
   useEffect(() => {
     const loadBibleVersions = async () => {
       try {
-        const versions = ['NKJV', 'chinese', 'pinyin'];
+        const versions = ['pinyin', 'chinese', 'NKJV'];
         const loadedVersions: { [version: string]: BibleData } = {};
 
         await Promise.all(
@@ -127,7 +127,7 @@ export function BibleNavigator() {
       });
 
       if (Object.keys(verseContent).length > 0) {
-        verses.push(`Verse ${verseNum}:`);
+        verses.push(`${verseNum}:`);
         Object.entries(verseContent).forEach(([version, content]) => {
           verses.push(`${version}: ${content}`);
         });
@@ -143,7 +143,7 @@ export function BibleNavigator() {
     return <Text>Loading Bible versions...</Text>;
   }
 
-  const firstVersion = Object.values(bibleVersions)[0];
+  const firstVersion = Object.values(bibleVersions)[2];
 
   return (
     <div style={styles.container}>
