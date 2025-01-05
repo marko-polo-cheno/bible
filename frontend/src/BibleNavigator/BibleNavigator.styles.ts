@@ -28,6 +28,6 @@ export const styles = {
     }),
     verseDisplay: {
       whiteSpace: 'pre-wrap' as const,
-      lineHeight: 1.5
+      lineHeight: 1.0
     }
   };

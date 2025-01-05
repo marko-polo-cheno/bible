@@ -25,19 +25,18 @@ export function BibleNavigator() {
     const loadBibleVersions = async () => {
       try {
         const versions = ['pinyin', 'chinese', 'NKJV'];
-        const loadedVersions: { [version: string]: BibleData } = {};
-
-        await Promise.all(
+        const loadedVersions: [string, BibleData][] = await Promise.all(
           versions.map(async (version) => {
             const response = await fetch(`data/${version}.json`);
             if (!response.ok) {
               throw new Error(`HTTP error! Status: ${response.status} for ${version}`);
             }
-            loadedVersions[version] = await response.json();
+            return [version, await response.json()];
           })
         );
 
-        setBibleVersions(loadedVersions);
+        const orderedVersions = Object.fromEntries(loadedVersions);
+        setBibleVersions(orderedVersions);
       } catch (error) {
         console.error('Error loading Bible versions:', error);
         alert('Failed to load Bible data. Please ensure all version files are located in public/data.');
@@ -106,6 +105,8 @@ export function BibleNavigator() {
     if (start === undefined || end === undefined || isNaN(start) || isNaN(end)) {
       return 'Invalid verse range selected.';
     }
+
+    const colors = ['#FFFFE0', '#E0FFFF', '#FFE0E0']; // Light yellow, blue, pink
     const verses: string[] = [];
 
     for (let verseNum = start; verseNum <= end; verseNum++) {
@@ -116,9 +117,7 @@ export function BibleNavigator() {
           Object.keys(data[testament] || {}).forEach((group) => {
             const chapterData = data[testament]?.[group]?.[book]?.[chapter] ?? {};
             if (chapterData[verseNum]) {
-              if (chapterData[verseNum]) {
-                verseContent[version] = chapterData[verseNum] as string;
-              }
+              verseContent[version] = chapterData[verseNum] as string;
             }
           });
         } catch (error) {
@@ -127,15 +126,22 @@ export function BibleNavigator() {
       });
 
       if (Object.keys(verseContent).length > 0) {
-        verses.push(`${verseNum}:`);
-        Object.entries(verseContent).forEach(([version, content]) => {
-          verses.push(`${version}: ${content}`);
+        verses.push(`<p style="margin: 0px 0;"><strong>${verseNum}:</strong></p>`);
+
+        Object.entries(verseContent).forEach(([version, content], index) => {
+          const color = colors[index % colors.length]; // Assign a color cyclically
+          verses.push(
+            `<p style="background-color: ${color}; padding: 1px; border-radius: 1px; margin: 0px 0;"><strong>${version}:</strong> ${content}</p>`
+          );
         });
-        verses.push('');
+
+        verses.push('<div style="height: 1px;"></div>'); // Separate verses
       }
     }
 
     if (verbose) console.log('Displayed verses for range:', range, verses);
+
+    // Wrap the verses in a container for rendering as HTML
     return verses.join('\n');
   };
 
@@ -246,9 +252,7 @@ export function BibleNavigator() {
           <Text size="lg" fw="bold">
             {book} {chapter}:{verseRange}
           </Text>
-          <pre style={styles.verseDisplay}>
-            {displayVerses(verseRange)}
-          </pre>
+          <div style={styles.verseDisplay} dangerouslySetInnerHTML={{ __html: displayVerses(verseRange) }} />
         </Box>
       )}
     </div>
