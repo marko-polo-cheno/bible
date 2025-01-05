@@ -6,7 +6,7 @@ Welcome to Bible Tools! This repository is dedicated to providing various tools 
 
 ### Pinyin Bible
 
-The Pinyin Bible tool helps you read the Bible in Pinyin, making it easier for those learning Chinese to understand the text.
+The [Pinyin Bible](https://marko-polo-cheno.github.io/bible/) tool helps you read the Bible in Pinyin, making it easier for those learning Chinese to understand the text.
 
 ## More to Come
 
