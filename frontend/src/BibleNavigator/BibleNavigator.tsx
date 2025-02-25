@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, Text, Box } from '@mantine/core';
+import { Radio, Text, Box, Autocomplete } from '@mantine/core';
 import { styles } from './BibleNavigator.styles';
 
 const verbose = true; // Set to true to enable debugging logs
@@ -16,10 +16,10 @@ interface BibleData {
 
 export function BibleNavigator() {
   const [bibleVersions, setBibleVersions] = useState<{ [version: string]: BibleData }>({});
-  const [testament, setTestament] = useState<string | null>(null);
-  const [book, setBook] = useState<string | null>(null);
-  const [chapter, setChapter] = useState<string | null>(null);
-  const [verseRange, setVerseRange] = useState<string | null>(null);
+  const [testament, setTestament] = useState<string>("new");
+  const [book, setBook] = useState<string>("John");
+  const [chapter, setChapter] = useState<string>("3");
+  const [verseRange, setVerseRange] = useState<string>("16-17");
 
   useEffect(() => {
     const loadBibleVersions = async () => {
@@ -96,7 +96,7 @@ export function BibleNavigator() {
     return ranges;
   };
 
-  const displayVerses = (range: string | null) => {
+  const displayVerses = (range: string) => {
     if (!testament || !book || !chapter || !range) {
       return 'Please select all options to view verses.';
     }
@@ -151,6 +151,7 @@ export function BibleNavigator() {
 
   const firstVersion = Object.values(bibleVersions)[2];
 
+
   return (
     <div style={styles.container}>
       <Text>Select a Testament:</Text>
@@ -169,59 +170,46 @@ export function BibleNavigator() {
             />
           ))}
         </Radio.Group>
-      </div>
+      </div> 
 
       {testament && (
-        <>
-          <Text mt="md">Select a Book:</Text>
-          {firstVersion && Object.entries(firstVersion[testament] || {}).map(([groupName, groupBooks]) => (
-            <div key={groupName}>
-              <Text size="sm" fw={500} mt="md">
-                {groupName}
-              </Text>
-              <div style={styles.flexContainer}>
-                <Radio.Group value={book} onChange={setBook}>
-                  {Object.keys(groupBooks).map((item) => (
-                    <Radio
-                      value={item}
-                      label={item}
-                      key={item}
-                      styles={{
-                        root: styles.radioRoot,
-                        inner: styles.radioInner,
-                        label: styles.getRadioLabel(book === item)
-                      }}
-                    />
-                  ))}
-                </Radio.Group>
-              </div>
-            </div>
-          ))}
-        </>
+        <Autocomplete
+          placeholder="Select a book"
+          value={book}
+          //onClick={() => setBook('')}
+          onChange={(value) => setBook(value ?? '')} // Ensure null values are handled
+          data={
+            firstVersion && testament
+              ? Object.entries(firstVersion[testament] || {}).map(([groupName, groupBooks]) => ({
+                group: groupName, // Group name (e.g., 'Historical', 'Poetical', etc.)
+                items: Object.keys(groupBooks), // List of books within the group
+              }))
+              : [] // Default empty array if no data
+          }
+          maxDropdownHeight={250}
+          styles={styles.autocomp}
+        />
       )}
 
       {book && (
         <>
-          <Text mt="md">Select a Chapter:</Text>
-          <div style={styles.flexContainer}>
-            <Radio.Group value={chapter} onChange={setChapter}>
-              {/* ... same pattern for chapters ... */}
-              {firstVersion && testament && firstVersion[testament] && Object.keys(firstVersion[testament])
-                .flatMap((group) => Object.keys(firstVersion[testament]?.[group]?.[book] || {}))
-                .map((item) => (
-                  <Radio
-                    value={item}
-                    label={item}
-                    key={item}
-                    styles={{
-                      root: styles.radioRoot,
-                      inner: styles.radioInner,
-                      label: styles.getRadioLabel(chapter === item)
-                    }}
-                  />
-                ))}
-            </Radio.Group>
-          </div>
+          <Autocomplete
+            label="Select a Chapter:"
+            placeholder="Pick or type a chapter"
+            value={chapter}
+            onChange={(value) => setChapter(value ?? '')} // Ensure null values are handled
+            data={
+              firstVersion && testament && book
+                ? Object.entries(firstVersion[testament] || {}) // Safely get groups for the testament
+                  .flatMap(([_, groupBooks]) =>
+                    Object.keys(groupBooks?.[book] || {}) // Safely extract chapters for the selected book
+                  )
+                : []
+            }
+            styles={styles.autocomp}
+            maxDropdownHeight={250}
+          />
+
         </>
       )}
 
