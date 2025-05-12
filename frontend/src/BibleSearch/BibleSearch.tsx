@@ -13,6 +13,10 @@ export default function AIBibleSearch() {
     setError(null);
     setResult(null);
     try {
+      console.log('Sending fetch to /api/search with query:', query);
+      const res0 = await fetch(
+        `https://bible-search-wheat.vercel.app/api/search?query=${encodeURIComponent(query)}`
+      );
       console.log('Sending fetch to /search with query:', query);
       const res = await fetch(
         `https://bible-search-wheat.vercel.app/search?query=${encodeURIComponent(query)}`
