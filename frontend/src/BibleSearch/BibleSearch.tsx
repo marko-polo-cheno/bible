@@ -14,7 +14,7 @@ export default function AIBibleSearch() {
     setResult(null);
     try {
       const res = await fetch(
-        `https://bible-search-wheat.vercel.app/api/search?query=${encodeURIComponent(query)}`
+        `https://bible-search-wheat.vercel.app/search?query=${encodeURIComponent(query)}`
       );
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();

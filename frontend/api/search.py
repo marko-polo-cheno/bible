@@ -135,6 +135,10 @@ def parse_passages(user_text: str) -> PassageQuery:
 
 
 @app.get("/")
+async def health_check():
+    return JSONResponse(content={"status": "ok"}, status_code=200)
+
+@app.get("/search")
 async def search_endpoint(query: str = ""):
     try:
         if not query:

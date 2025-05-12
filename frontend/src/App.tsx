@@ -8,7 +8,7 @@ function App() {
   return (
     <MantineProvider withGlobalStyles withNormalizeCSS>
       <div>
-        <Tabs defaultValue="bibleNavigator">
+        <Tabs defaultValue="bibleSearch">
           <Tabs.List>
             <Tabs.Tab value="bibleNavigator">Bible Navigator</Tabs.Tab>
             <Tabs.Tab value="similarBibleVerses">Connected Verses</Tabs.Tab>
