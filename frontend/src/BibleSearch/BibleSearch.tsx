@@ -13,14 +13,18 @@ export default function AIBibleSearch() {
     setError(null);
     setResult(null);
     try {
+      console.log('Sending fetch to /search with query:', query);
       const res = await fetch(
         `https://bible-search-wheat.vercel.app/search?query=${encodeURIComponent(query)}`
       );
+      console.log('Fetch response:', res);
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
+      console.log('Fetch response JSON:', data);
       setResult(data);
     } catch (err: any) {
       setError(err.message || 'Unknown error');
+      console.error('Fetch error:', err);
     } finally {
       setLoading(false);
     }

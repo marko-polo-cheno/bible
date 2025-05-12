@@ -140,8 +140,10 @@ async def health_check():
 
 @app.get("/search")
 async def search_endpoint(query: str = ""):
+    print(f"[DEBUG] /search endpoint called with query: '{query}'")
     try:
         if not query:
+            print("[DEBUG] Missing query parameter")
             return JSONResponse(content={"error": "Missing query parameter"}, status_code=400)
 
         result = parse_passages(query)
@@ -149,8 +151,10 @@ async def search_endpoint(query: str = ""):
             "passages": [p.model_dump() for p in result.passages],
             "secondary_passages": [p.model_dump() for p in result.secondary_passages],
         }
+        print(f"[DEBUG] /search result: {response}")
         return JSONResponse(content=response, status_code=200)
     except Exception as e:
+        print(f"[ERROR] Exception in /search: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
