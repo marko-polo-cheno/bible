@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "search.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/search", "dest": "search.py" },
+    { "src": "/", "dest": "search.py" }
+  ]
+} 
