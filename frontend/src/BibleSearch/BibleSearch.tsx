@@ -8,7 +8,7 @@ export default function AIBibleSearch() {
   const handleSearch = async () => {
     setLoading(true);
     const res = await fetch(
-      `https://bible-drab.vercel.app/api/search?query=${encodeURIComponent(query)}`
+      `https://bible-search-wheat.vercel.app/api/search?query=${encodeURIComponent(query)}`
     );
     const data = await res.json();
     setResult(data);
