@@ -120,20 +120,36 @@ def parse_passages(user_text: str) -> PassageQuery:
     return response.choices[0].message.parsed
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Bible Passage Search Query Parser")
-    parser.add_argument(
-        "query", type=str,
-        help="User input describing verses or ranges, e.g. 'John 3:16' or 'Gen 1:1-2'"
-    )
-    args = parser.parse_args()
-    query = parse_passages(args.query)
-    print("Parsed Passages:")
-    for p in query.passages:
-        print(p.model_dump_json())
-    print("Secondary Passages:")
-    for p in query.secondary_passages:
-        print(p.model_dump_json())
+def handler(request):
+    headers = {"Access-Control-Allow-Origin": "*"}
+    try:
+        query = request.args.get("query", "")
+        if not query:
+            return {"error": "Missing query parameter"}, 400, headers
 
-if __name__ == "__main__":
-    main()
+        result = parse_passages(query)
+        response = {
+            "passages": [p.model_dump() for p in result.passages],
+            "secondary_passages": [p.model_dump() for p in result.secondary_passages],
+        }
+        return response, 200, headers
+    except Exception as e:
+        return {"error": str(e)}, 500, headers
+
+# def main():
+#     parser = argparse.ArgumentParser(description="Bible Passage Search Query Parser")
+#     parser.add_argument(
+#         "query", type=str,
+#         help="User input describing verses or ranges, e.g. 'John 3:16' or 'Gen 1:1-2'"
+#     )
+#     args = parser.parse_args()
+#     query = parse_passages(args.query)
+#     print("Parsed Passages:")
+#     for p in query.passages:
+#         print(p.model_dump_json())
+#     print("Secondary Passages:")
+#     for p in query.secondary_passages:
+#         print(p.model_dump_json())
+
+# if __name__ == "__main__":
+#     main()
