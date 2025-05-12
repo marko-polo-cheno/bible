@@ -4,8 +4,17 @@ from pydantic import BaseModel
 from openai import OpenAI
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://marko-polo-cheno.github.io"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class Verse(BaseModel):
     """
@@ -126,19 +135,18 @@ def parse_passages(user_text: str) -> PassageQuery:
 
 @app.get("/search")
 async def search_endpoint(query: str = ""):
-    headers = {"Access-Control-Allow-Origin": "*"}
     try:
         if not query:
-            return JSONResponse(content={"error": "Missing query parameter"}, status_code=400, headers=headers)
+            return JSONResponse(content={"error": "Missing query parameter"}, status_code=400)
 
         result = parse_passages(query)
         response = {
             "passages": [p.model_dump() for p in result.passages],
             "secondary_passages": [p.model_dump() for p in result.secondary_passages],
         }
-        return JSONResponse(content=response, status_code=200, headers=headers)
+        return JSONResponse(content=response, status_code=200)
     except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500, headers=headers)
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 # def main():
