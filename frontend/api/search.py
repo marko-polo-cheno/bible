@@ -5,6 +5,7 @@ from openai import OpenAI
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 app = FastAPI()
 
@@ -164,5 +165,5 @@ async def search_endpoint(query: str = ""):
 #     for p in query.secondary_passages:
 #         print(p.model_dump_json())
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    uvicorn.run("search:app", host="0.0.0.0", port=8000, reload=True)
