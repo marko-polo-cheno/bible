@@ -136,6 +136,7 @@ def handler(request):
     except Exception as e:
         return {"error": str(e)}, 500, headers
 
+
 # def main():
 #     parser = argparse.ArgumentParser(description="Bible Passage Search Query Parser")
 #     parser.add_argument(
