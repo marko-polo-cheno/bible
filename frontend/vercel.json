@@ -5,7 +5,7 @@
     { "src": "dist/**", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "/dist/$1" },
-    { "src": "/search", "dest": "/api/search" }
+    { "src": "/search", "dest": "/api/search" },
+    { "src": "/(.*)", "dest": "/dist/$1" }
   ]
 } 
