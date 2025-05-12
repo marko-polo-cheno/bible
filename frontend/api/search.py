@@ -133,7 +133,7 @@ def parse_passages(user_text: str) -> PassageQuery:
     return response.choices[0].message.parsed
 
 
-@app.get("/search")
+@app.get("/")
 async def search_endpoint(query: str = ""):
     try:
         if not query:
