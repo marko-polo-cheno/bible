@@ -4,9 +4,7 @@
     { "src": "search.py", "use": "@vercel/python" }
   ],
   "routes": [
-    { "src": "/(.*)?", "dest": "api/search.py" }
-  ],
-  "env": {
-    "APP_MODULE": "search:app"
-  }
+    { "src": "/search", "dest": "search.py" },
+    { "src": "/", "dest": "search.py" }
+  ]
 } 

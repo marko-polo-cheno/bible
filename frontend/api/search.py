@@ -11,7 +11,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://marko-polo-cheno.github.io"],
+    allow_origins=["https://marko-polo-cheno.github.io", "https://bible-search-wheat.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -170,4 +170,4 @@ async def search_endpoint(query: str = ""):
 #         print(p.model_dump_json())
 
 if __name__ == "__main__":
-    uvicorn.run("search:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
