@@ -2,6 +2,10 @@ import argparse
 from typing import List, Union
 from pydantic import BaseModel
 from openai import OpenAI
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
 
 class Verse(BaseModel):
     """
@@ -120,21 +124,21 @@ def parse_passages(user_text: str) -> PassageQuery:
     return response.choices[0].message.parsed
 
 
-def handler(request):
+@app.get("/search")
+async def search_endpoint(query: str = ""):
     headers = {"Access-Control-Allow-Origin": "*"}
     try:
-        query = request.args.get("query", "")
         if not query:
-            return {"error": "Missing query parameter"}, 400, headers
+            return JSONResponse(content={"error": "Missing query parameter"}, status_code=400, headers=headers)
 
         result = parse_passages(query)
         response = {
             "passages": [p.model_dump() for p in result.passages],
             "secondary_passages": [p.model_dump() for p in result.secondary_passages],
         }
-        return response, 200, headers
+        return JSONResponse(content=response, status_code=200, headers=headers)
     except Exception as e:
-        return {"error": str(e)}, 500, headers
+        return JSONResponse(content={"error": str(e)}, status_code=500, headers=headers)
 
 
 # def main():
