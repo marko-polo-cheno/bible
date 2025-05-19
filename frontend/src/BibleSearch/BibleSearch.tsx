@@ -2,11 +2,16 @@ import { useState, useRef } from 'react';
 import { Text, Box, Button, Loader, TextInput, Paper, Group, Divider } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
 
+
 function findTestamentAndGroup(nkjvData: any, book: string) {
   for (const testament of Object.keys(nkjvData)) {
     for (const group of Object.keys(nkjvData[testament])) {
       if (nkjvData[testament][group][book]) {
-        return { testament, group };
+        return { testament, group, bookKey: book };
+      }
+      // Try with 's' appended if not found
+      if (nkjvData[testament][group][book + 's']) {
+        return { testament, group, bookKey: book + 's' };
       }
     }
   }
@@ -60,9 +65,9 @@ export default function AIBibleSearch() {
     const book = passage.book;
     const found = findTestamentAndGroup(nkjv, book);
     if (!found) return null;
-    const { testament, group } = found;
-    if (!testament || !group) return null;
-    const bookData = nkjv[testament]?.[group]?.[book];
+    const { testament, group, bookKey } = found;
+    if (!testament || !group || !bookKey) return null;
+    const bookData = nkjv[testament]?.[group]?.[bookKey];
     if (!bookData) return null;
 
     // Single verse
