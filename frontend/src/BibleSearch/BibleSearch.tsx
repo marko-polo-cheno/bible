@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Text, Box, Button, Loader, TextInput, Paper, Group, Divider } from '@mantine/core';
+import { Text, Box, Button, Loader, TextInput, Paper, Group, Divider, SegmentedControl, Stack } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
 
 
@@ -25,6 +25,11 @@ export default function AIBibleSearch() {
   const [error, setError] = useState<string | null>(null);
   const [nkjv, setNKJV] = useState<any>(null);
   const nkjvLoaded = useRef(false);
+  
+  // Search control states
+  const [resultCount, setResultCount] = useState("few");
+  const [contentType, setContentType] = useState("verses");
+  const [modelType, setModelType] = useState("fast");
 
   // Load NKJV.json only once
   const loadNKJV = async () => {
@@ -46,8 +51,17 @@ export default function AIBibleSearch() {
       if (!nkjvLoaded.current) {
         await loadNKJV();
       }
+      
+      // Build search parameters
+      const params = new URLSearchParams({
+        query: query,
+        result_count: resultCount,
+        content_type: contentType,
+        model_type: modelType
+      });
+      
       const res = await fetch(
-        `https://bible-production-d7b3.up.railway.app/search?query=${encodeURIComponent(query)}`
+        `http://localhost:8000/search?${params.toString()}`
       );
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
@@ -145,20 +159,74 @@ export default function AIBibleSearch() {
   return (
     <Box style={styles.container}>
       <Text size="xl" fw="bold" mb="md">AI Bible Search</Text>
-      <Group align="flex-end" mb="md">
-        <TextInput
-          value={query}
-          onChange={e => setQuery(e.currentTarget.value)}
-          placeholder="What are you looking for from the Bible?"
-          style={{ minWidth: 300 }}
-          styles={styles.autocomp}
-          label="Search Query"
-          onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
-        />
-        <Button onClick={handleSearch} loading={loading} disabled={!query.trim()} color="blue" size="md">
-          Search
-        </Button>
-      </Group>
+      
+      {/* Search Controls */}
+      <Stack gap="md" mb="md">
+        <Group align="flex-end">
+          <TextInput
+            value={query}
+            onChange={e => setQuery(e.currentTarget.value)}
+            placeholder="What are you looking for from the Bible?"
+            style={{ minWidth: 300 }}
+            styles={styles.autocomp}
+            label="Search Query"
+            onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
+          />
+          <Button onClick={handleSearch} loading={loading} disabled={!query.trim()} color="blue" size="md">
+            Search
+          </Button>
+        </Group>
+        
+        {/* Search Options */}
+        <Group gap="lg" align="flex-start">
+          <Box>
+            <Text size="sm" fw={500} mb={3}>
+              Result Count
+            </Text>
+            <SegmentedControl
+              value={resultCount}
+              onChange={setResultCount}
+              data={[
+                { label: 'One', value: 'one' },
+                { label: 'Few', value: 'few' },
+                { label: 'Many', value: 'many' },
+              ]}
+              size="sm"
+            />
+          </Box>
+          
+          <Box>
+            <Text size="sm" fw={500} mb={3}>
+              Content Type
+            </Text>
+            <SegmentedControl
+              value={contentType}
+              onChange={setContentType}
+              data={[
+                { label: 'Verses', value: 'verses' },
+                { label: 'Passages', value: 'passages' },
+                { label: 'All', value: 'all' },
+              ]}
+              size="sm"
+            />
+          </Box>
+          
+          <Box>
+            <Text size="sm" fw={500} mb={3}>
+              Model Type
+            </Text>
+            <SegmentedControl
+              value={modelType}
+              onChange={setModelType}
+              data={[
+                { label: 'Fast', value: 'fast' },
+                { label: 'Advanced', value: 'advanced' },
+              ]}
+              size="sm"
+            />
+          </Box>
+        </Group>
+      </Stack>
       {loading && <Loader color="blue" />}
       {error && <Text color="red" mt="md">{error}</Text>}
       {result && (

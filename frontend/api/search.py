@@ -1,4 +1,5 @@
 import argparse
+from loguru import logger
 from typing import List, Union
 from pydantic import BaseModel
 from openai import OpenAI
@@ -11,7 +12,11 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://marko-polo-cheno.github.io"],
+    allow_origins=[
+        "https://marko-polo-cheno.github.io",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,20 +123,44 @@ secondary_passages=[]
 
 client = OpenAI()
 
-def parse_passages(user_text: str) -> PassageQuery:
+def parse_passages(user_text: str, result_count: str = "few", content_type: str = "verses", model_type: str = "fast") -> PassageQuery:
     """
     Send the user query text to the LLM and parse the response into a PassageQuery.
     """
-    response = client.beta.chat.completions.parse(
-        model="o4-mini",
-        reasoning_effort="high",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_text},
-        ],
-        response_format=PassageQuery,
-    )
-    return response.choices[0].message.parsed
+    if model_type == "fast":
+        model = "gpt-5-nano-2025-08-07"
+    else:
+        model = "gpt-5-2025-08-07"
+    
+    system_prompt = SYSTEM_PROMPT
+    if content_type == "verses":
+        system_prompt += "\n\nFocus on finding individual verses rather than long passages."
+    elif content_type == "passages":
+        system_prompt += "\n\nFocus on finding complete sections or chapters rather than individual verses."
+
+    if result_count == "one":
+        user_text += "\n\nReturn only the most relevant single result in the passages list."
+    elif result_count == "few":
+        user_text += "\n\nReturn a small number (2-5) of the most relevant results in the passages list."
+    elif result_count == "many":
+        user_text += "\n\nReturn a comprehensive list of relevant results in the passages list."
+    
+    try:
+        logger.info(f"Making API call to {model} with reasoning_effort={'high' if model_type == 'advanced' else 'low'}")
+        response = client.beta.chat.completions.parse(
+            model=model,
+            reasoning_effort="high" if model_type == "advanced" else "low",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text},
+            ],
+            response_format=PassageQuery,
+        )
+        logger.info("API call completed successfully")
+        return response.choices[0].message.parsed
+    except Exception as e:
+        logger.error(f"API call failed: {str(e)}")
+        raise
 
 
 @app.get("/")
@@ -139,42 +168,34 @@ async def health_check():
     return JSONResponse(content={"status": "ok"}, status_code=200)
 
 @app.get("/search")
-async def search_endpoint(query: str = ""):
-    print(f"[DEBUG] /search endpoint called with query: '{query}'")
+async def search_endpoint(
+    query: str = "", 
+    result_count: str = "few", 
+    content_type: str = "verses", 
+    model_type: str = "fast"
+):
+    logger.info(f"/search endpoint called with query: '{query}', result_count: '{result_count}', content_type: '{content_type}', model_type: '{model_type}'")
     try:
         if not query:
-            print("[DEBUG] Missing query parameter")
+            logger.info("Missing query parameter")
             return JSONResponse(content={"error": "Missing query parameter"}, status_code=400)
 
-        result = parse_passages(query)
+        result = parse_passages(query, result_count, content_type, model_type)
         response = {
             "passages": [p.model_dump() for p in result.passages],
             "secondary_passages": [p.model_dump() for p in result.secondary_passages],
         }
-        print(f"[DEBUG] /search result: {response}")
+        logger.info(f"/search result: {response}")
         return JSONResponse(content=response, status_code=200)
     except Exception as e:
-        print(f"[ERROR] Exception in /search: {e}")
+        logger.error(f"Exception in /search: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-# def main():
-#     parser = argparse.ArgumentParser(description="Bible Passage Search Query Parser")
-#     parser.add_argument(
-#         "query", type=str,
-#         help="User input describing verses or ranges, e.g. 'John 3:16' or 'Gen 1:1-2'"
-#     )
-#     args = parser.parse_args()
-#     query = parse_passages(args.query)
-#     print("Parsed Passages:")
-#     for p in query.passages:
-#         print(p.model_dump_json())
-#     print("Secondary Passages:")
-#     for p in query.secondary_passages:
-#         print(p.model_dump_json())
+
+def main():
+    """Entry point for the application."""
+    uvicorn.run("search:app", host="0.0.0.0", port=8000, reload=True)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
-
-# if __name__ == "__main__":
-#     main()
+    main()
