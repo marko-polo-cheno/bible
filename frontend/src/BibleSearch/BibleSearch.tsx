@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
-import { Text, Box, Button, Loader, TextInput, Paper, Group, Divider, SegmentedControl, Stack } from '@mantine/core';
+import { useState, useRef, useEffect } from 'react';
+import { Text, Box, Button, Loader, TextInput, Paper, Group, Divider, SegmentedControl, Stack, ScrollArea, Collapse } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
+import { useChat, ChatMessage } from '../contexts/ChatContext';
 
 
 function findTestamentAndGroup(nkjvData: any, book: string) {
@@ -20,11 +21,12 @@ function findTestamentAndGroup(nkjvData: any, book: string) {
 
 export default function AIBibleSearch() {
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nkjv, setNKJV] = useState<any>(null);
+  const { chatHistory, addMessage, toggleMessageCollapse, clearChat, exportChatHistory } = useChat();
   const nkjvLoaded = useRef(false);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   
   // Search control states
   const [resultCount, setResultCount] = useState("few");
@@ -43,9 +45,21 @@ export default function AIBibleSearch() {
   };
 
   const handleSearch = async () => {
+    if (!query.trim()) return;
+    
     setLoading(true);
     setError(null);
-    setResult(null);
+    
+    // Add user message to chat history
+    addMessage({
+      type: 'user',
+      content: query
+    });
+    
+    const currentQuery = query;
+    const currentSettings = { resultCount, contentType, modelType };
+    setQuery(""); // Clear input
+    
     try {
       // Load NKJV if not loaded
       if (!nkjvLoaded.current) {
@@ -54,7 +68,7 @@ export default function AIBibleSearch() {
       
       // Build search parameters
       const params = new URLSearchParams({
-        query: query,
+        query: currentQuery,
         result_count: resultCount,
         content_type: contentType,
         model_type: modelType
@@ -65,9 +79,37 @@ export default function AIBibleSearch() {
       );
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      setResult(data);
+      
+      // Create summary text with actual verse references
+      const passageRefs = data.passages?.map((passage: any) => passageReferenceString(passage)) || [];
+      const bonusRefs = data.secondary_passages?.map((passage: any) => passageReferenceString(passage)) || [];
+      
+      let summaryText = '';
+      if (passageRefs.length > 0) {
+        summaryText = passageRefs.join(', ');
+        if (bonusRefs.length > 0) {
+          summaryText += ` (${bonusRefs.length} bonus: ${bonusRefs.join(', ')})`;
+        }
+      } else {
+        summaryText = 'No passages found';
+      }
+      
+      // Add assistant response to chat history
+      addMessage({
+        type: 'assistant',
+        content: summaryText,
+        result: data,
+        settings: currentSettings
+      });
     } catch (err: any) {
       setError(err.message || 'Unknown error');
+      
+      // Add error message to chat history
+      addMessage({
+        type: 'assistant',
+        content: `Error: ${err.message || 'Unknown error'}`,
+        settings: currentSettings
+      });
     } finally {
       setLoading(false);
     }
@@ -135,9 +177,21 @@ export default function AIBibleSearch() {
     return passage.book;
   }
 
+  // Auto-scroll to bottom when new messages are added
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
+  }, [chatHistory]);
+
   // Render a list of passage objects with their NKJV text
-  function renderPassages(passages: any[] | undefined) {
+  function renderPassages(passages: any[] | undefined, isCollapsed: boolean = false) {
     if (!passages || passages.length === 0) return <Text>No passages found.</Text>;
+    
+    if (isCollapsed) {
+      return <Text size="sm" c="dimmed">{passages.length} passages found</Text>;
+    }
+    
     return (
       <>
         {passages.map((passage, idx) => {
@@ -156,28 +210,151 @@ export default function AIBibleSearch() {
     );
   }
 
+  // Render bonus passages with proper messaging
+  function renderBonusPassages(passages: any[] | undefined, isCollapsed: boolean = false) {
+    if (!passages || passages.length === 0) {
+      return <Text size="sm" c="dimmed">No bonus passages.</Text>;
+    }
+    
+    if (isCollapsed) {
+      return <Text size="sm" c="dimmed">{passages.length} bonus passages found.</Text>;
+    }
+    
+    return (
+      <>
+        <Text size="sm" c="dimmed" mb="sm">{passages.length} bonus passages found.</Text>
+        {passages.map((passage, idx) => {
+          const text = getNKJVTextForPassage(nkjv, passage);
+          return (
+            <Paper key={JSON.stringify(passage) + idx} shadow="xs" p="sm" mb="sm" radius="md" withBorder>
+              <Text size="md" fw="bold">{passageReferenceString(passage)}</Text>
+              <Divider my="xs" />
+              <Text size="md" color={text ? undefined : 'red'}>
+                {text || 'Not found in NKJV data.'}
+              </Text>
+            </Paper>
+          );
+        })}
+      </>
+    );
+  }
+
+  // Format timestamp to nearest minute
+  function formatTimestamp(date: Date): string {
+    const roundedDate = new Date(date);
+    roundedDate.setSeconds(0, 0); // Round to nearest minute
+    return roundedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Format settings for display
+  function formatSettings(settings: any): string {
+    if (!settings) return '';
+    const resultCountLabel = settings.resultCount === 'one' ? 'One' : 
+                            settings.resultCount === 'few' ? 'Few' : 'Many';
+    const contentTypeLabel = settings.contentType === 'verses' ? 'Verses' :
+                            settings.contentType === 'passages' ? 'Passages' : 'All';
+    const modelTypeLabel = settings.modelType === 'fast' ? 'Fast' : 'Advanced';
+    
+    return `Settings: ${resultCountLabel} results, ${contentTypeLabel}, ${modelTypeLabel} model`;
+  }
+
+  // Render a chat message
+  function renderChatMessage(message: ChatMessage, isLatest: boolean) {
+    const isCollapsed = message.collapsed || false;
+    
+    return (
+      <Box key={message.id} mb="md">
+        <Paper 
+          shadow="xs" 
+          p="md" 
+          radius="md" 
+          withBorder
+          style={{
+            backgroundColor: message.type === 'user' ? '#f8f9fa' : '#ffffff',
+            marginLeft: message.type === 'user' ? '20%' : '0',
+            marginRight: message.type === 'user' ? '0' : '20%'
+          }}
+        >
+          <Group justify="space-between" mb="xs">
+            <Text size="sm" fw={500} c={message.type === 'user' ? 'blue' : 'green'}>
+              {message.type === 'user' ? 'You' : 'AI Assistant'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {formatTimestamp(message.timestamp)}
+            </Text>
+          </Group>
+          
+          <Text size="md" mb={message.result ? "sm" : 0}>
+            {message.content}
+          </Text>
+          
+          {message.result && (
+            <Box>
+              <Button
+                variant="subtle"
+                size="xs"
+                onClick={() => toggleMessageCollapse(message.id)}
+                mb="sm"
+              >
+                {isCollapsed ? 'Show' : 'Hide'} Results
+              </Button>
+              
+              <Collapse in={!isCollapsed}>
+                <Box>
+                  <Text size="lg" fw="bold" mb="sm">Passages</Text>
+                  <Box style={styles.verseDisplay} mb="md">
+                    {renderPassages(message.result.passages, isCollapsed)}
+                  </Box>
+                  
+                  <Text size="lg" fw="bold" mb="sm">Bonus Passages</Text>
+                  <Box style={styles.verseDisplay} mb="sm">
+                    {renderBonusPassages(message.result.secondary_passages, isCollapsed)}
+                  </Box>
+                  
+                  {/* Settings footer */}
+                  {message.settings && (
+                    <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+                      {formatSettings(message.settings)}
+                    </Text>
+                  )}
+                </Box>
+              </Collapse>
+            </Box>
+          )}
+        </Paper>
+      </Box>
+    );
+  }
+
   return (
     <Box style={styles.container}>
       <Text size="xl" fw="bold" mb="md">AI Bible Search</Text>
       
-      {/* Search Controls */}
-      <Stack gap="md" mb="md">
-        <Group align="flex-end">
-          <TextInput
-            value={query}
-            onChange={e => setQuery(e.currentTarget.value)}
-            placeholder="What are you looking for from the Bible?"
-            style={{ minWidth: 300 }}
-            styles={styles.autocomp}
-            label="Search Query"
-            onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
-          />
-          <Button onClick={handleSearch} loading={loading} disabled={!query.trim()} color="blue" size="md">
-            Search
-          </Button>
+      {/* Search Settings - Moved to top */}
+      <Paper shadow="xs" p="md" mb="md" radius="md" withBorder>
+        <Group justify="space-between" mb="sm">
+          <Text size="md" fw="bold">Search Settings</Text>
+          {chatHistory.length > 0 && (
+            <Group gap="xs">
+              <Button 
+                variant="outline" 
+                size="xs" 
+                color="blue"
+                onClick={exportChatHistory}
+              >
+                Export Chat
+              </Button>
+              <Button 
+                variant="outline" 
+                size="xs" 
+                color="red"
+                onClick={clearChat}
+              >
+                Clear Chat History
+              </Button>
+            </Group>
+          )}
         </Group>
-        
-        {/* Search Options */}
         <Group gap="lg" align="flex-start">
           <Box>
             <Text size="sm" fw={500} mb={3}>
@@ -226,21 +403,118 @@ export default function AIBibleSearch() {
             />
           </Box>
         </Group>
-      </Stack>
-      {loading && <Loader color="blue" />}
-      {error && <Text color="red" mt="md">{error}</Text>}
-      {result && (
-        <Paper shadow="xs" p="md" mt="md" radius="md" withBorder>
-          <Text size="lg" fw="bold" mb="sm">Passages</Text>
-          <Box style={styles.verseDisplay} mb="md">
-            {renderPassages(result.passages)}
-          </Box>
-          <Text size="lg" fw="bold" mb="sm">Bonus Passages</Text>
-          <Box style={styles.verseDisplay}>
-            {renderPassages(result.secondary_passages)}
-          </Box>
-        </Paper>
-      )}
+      </Paper>
+      
+      {/* Chat Interface */}
+      <Box style={{ 
+        maxWidth: '66.67%', 
+        margin: '0 auto',
+        height: '60vh', 
+        display: 'flex', 
+        flexDirection: 'column' 
+      }}>
+        {chatHistory.length === 0 ? (
+          /* Empty State - Input is more prominent */
+          <Stack gap="lg" style={{ flex: 1, justifyContent: 'center' }}>
+            <Paper shadow="xs" p="xl" radius="md" withBorder style={{ textAlign: 'center' }}>
+              <Text size="lg" c="dimmed">
+                Start a conversation with the AI Bible Search
+              </Text>
+              <Text size="sm" c="dimmed" mt="xs">
+                Ask questions about Bible verses, stories, or themes
+              </Text>
+            </Paper>
+            
+            {/* Prominent Input for Empty State */}
+            <Paper shadow="md" p="lg" radius="md" withBorder>
+              <Group align="flex-end">
+                <TextInput
+                  value={query}
+                  onChange={e => setQuery(e.currentTarget.value)}
+                  placeholder="Ask me anything about the Bible..."
+                  style={{ flex: 1 }}
+                  styles={styles.autocomp}
+                  onKeyDown={e => { 
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSearch();
+                    }
+                  }}
+                  multiline
+                  minRows={2}
+                  maxRows={4}
+                  size="lg"
+                />
+                <Button 
+                  onClick={handleSearch} 
+                  loading={loading} 
+                  disabled={!query.trim()} 
+                  color="blue" 
+                  size="lg"
+                >
+                  Send
+                </Button>
+              </Group>
+            </Paper>
+          </Stack>
+        ) : (
+          /* Chat History Exists - Normal Layout */
+          <>
+            {/* Chat History */}
+            <ScrollArea 
+              ref={scrollAreaRef}
+              style={{ flex: 1, marginBottom: '1rem' }}
+              scrollbarSize={6}
+            >
+              {chatHistory.map((message, index) => 
+                renderChatMessage(message, index === chatHistory.length - 1)
+              )}
+              
+              {loading && (
+                <Box mb="md">
+                  <Paper shadow="xs" p="md" radius="md" withBorder style={{ marginRight: '20%' }}>
+                    <Group>
+                      <Loader size="sm" color="blue" />
+                      <Text size="sm" c="dimmed">AI is searching...</Text>
+                    </Group>
+                  </Paper>
+                </Box>
+              )}
+            </ScrollArea>
+            
+            {/* Chat Input */}
+            <Paper shadow="xs" p="md" radius="md" withBorder>
+              <Group align="flex-end">
+                <TextInput
+                  value={query}
+                  onChange={e => setQuery(e.currentTarget.value)}
+                  placeholder="Ask me anything about the Bible..."
+                  style={{ flex: 1 }}
+                  styles={styles.autocomp}
+                  onKeyDown={e => { 
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSearch();
+                    }
+                  }}
+                  multiline
+                  minRows={1}
+                  maxRows={4}
+                />
+                <Button 
+                  onClick={handleSearch} 
+                  loading={loading} 
+                  disabled={!query.trim()} 
+                  color="blue" 
+                  size="md"
+                >
+                  Send
+                </Button>
+              </Group>
+            </Paper>
+          </>
+        )}
+      </Box>
     </Box>
   );
 }
