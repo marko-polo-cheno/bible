@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Text, Box, Button, Loader, TextInput, Paper, Group, Divider, SegmentedControl, Stack, ScrollArea, Collapse } from '@mantine/core';
+import { Text, Box, Button, Loader, Textarea, Paper, Group, Divider, SegmentedControl, Stack, ScrollArea, Collapse } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
 import { API_CONFIG } from '../config/api';
@@ -103,13 +103,17 @@ export default function AIBibleSearch() {
         result: data,
         settings: currentSettings
       });
+      
+      // Clear any previous errors on successful search
+      setError(null);
     } catch (err: any) {
-      setError(err.message || 'Unknown error');
+      const errorMessage = err.message || 'Unknown error';
+      setError(errorMessage);
       
       // Add error message to chat history
       addMessage({
         type: 'assistant',
-        content: `Error: ${err.message || 'Unknown error'}`,
+        content: `Error: ${errorMessage}`,
         settings: currentSettings
       });
     } finally {
@@ -261,7 +265,7 @@ export default function AIBibleSearch() {
   }
 
   // Render a chat message
-  function renderChatMessage(message: ChatMessage, isLatest: boolean) {
+  function renderChatMessage(message: ChatMessage) {
     const isCollapsed = message.collapsed || false;
     
     return (
@@ -430,7 +434,7 @@ export default function AIBibleSearch() {
             {/* Prominent Input for Empty State */}
             <Paper shadow="md" p="lg" radius="md" withBorder>
               <Group align="flex-end">
-                <TextInput
+                <Textarea
                   value={query}
                   onChange={e => setQuery(e.currentTarget.value)}
                   placeholder="Ask me anything about the Bible..."
@@ -442,7 +446,6 @@ export default function AIBibleSearch() {
                       handleSearch();
                     }
                   }}
-                  multiline
                   minRows={2}
                   maxRows={4}
                   size="lg"
@@ -468,26 +471,44 @@ export default function AIBibleSearch() {
               style={{ flex: 1, marginBottom: '1rem' }}
               scrollbarSize={6}
             >
-              {chatHistory.map((message, index) => 
-                renderChatMessage(message, index === chatHistory.length - 1)
+              {chatHistory.map((message) => 
+                renderChatMessage(message)
               )}
               
-              {loading && (
-                <Box mb="md">
-                  <Paper shadow="xs" p="md" radius="md" withBorder style={{ marginRight: '20%' }}>
-                    <Group>
-                      <Loader size="sm" color="blue" />
-                      <Text size="sm" c="dimmed">AI is searching...</Text>
-                    </Group>
-                  </Paper>
-                </Box>
-              )}
+          {loading && (
+            <Box mb="md">
+              <Paper shadow="xs" p="md" radius="md" withBorder style={{ marginRight: '20%' }}>
+                <Group>
+                  <Loader size="sm" color="blue" />
+                  <Text size="sm" c="dimmed">AI is searching...</Text>
+                </Group>
+              </Paper>
+            </Box>
+          )}
+          
+          {error && (
+            <Box mb="md">
+              <Paper shadow="xs" p="md" radius="md" withBorder style={{ marginRight: '20%', backgroundColor: '#ffe6e6' }}>
+                <Group>
+                  <Text size="sm" c="red" fw={500}>Error: {error}</Text>
+                  <Button 
+                    variant="subtle" 
+                    size="xs" 
+                    color="red"
+                    onClick={() => setError(null)}
+                  >
+                    Dismiss
+                  </Button>
+                </Group>
+              </Paper>
+            </Box>
+          )}
             </ScrollArea>
             
             {/* Chat Input */}
             <Paper shadow="xs" p="md" radius="md" withBorder>
               <Group align="flex-end">
-                <TextInput
+                <Textarea
                   value={query}
                   onChange={e => setQuery(e.currentTarget.value)}
                   placeholder="Ask me anything about the Bible..."
@@ -499,7 +520,6 @@ export default function AIBibleSearch() {
                       handleSearch();
                     }
                   }}
-                  multiline
                   minRows={1}
                   maxRows={4}
                 />
