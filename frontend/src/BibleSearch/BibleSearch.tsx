@@ -75,7 +75,7 @@ export default function AIBibleSearch() {
       });
       
       const res = await fetch(
-        `http://localhost:8000/search?${params.toString()}`
+        `/search?${params.toString()}`
       );
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();

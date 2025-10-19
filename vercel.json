@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "public": true,
+  "builds": [
+    { "src": "frontend/dist/**", "use": "@vercel/static" },
+    { "src": "backend/**/*.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/search", "dest": "/backend/search" },
+    { "src": "/(.*)", "dest": "/frontend/dist/$1" }
+  ]
+} 
