@@ -75,9 +75,10 @@ export default function AIBibleSearch() {
         model_type: modelType
       });
       
-      const res = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}?${params.toString()}`
-      );
+      const apiUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}?${params.toString()}`;
+      console.log('Making API request to:', apiUrl);
+      
+      const res = await fetch(apiUrl);
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       
