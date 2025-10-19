@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Text, Box, Button, Loader, TextInput, Paper, Group, Divider, SegmentedControl, Stack, ScrollArea, Collapse } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
+import { API_CONFIG } from '../config/api';
 
 
 function findTestamentAndGroup(nkjvData: any, book: string) {
@@ -75,7 +76,7 @@ export default function AIBibleSearch() {
       });
       
       const res = await fetch(
-        `/search?${params.toString()}`
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}?${params.toString()}`
       );
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
