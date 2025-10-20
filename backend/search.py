@@ -8,6 +8,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+import json
+from typing import List, Dict, Any
 
 app = FastAPI()
 
@@ -111,6 +113,9 @@ class PassageQuery(BaseModel):
     passages: List[Union[Verse, VerseRange]]
     secondary_passages: List[Union[Verse, VerseRange]]
 
+class TestimoniesSearchQuery(BaseModel):
+    terms: List[str]
+
 SYSTEM_PROMPT = """\
 You are a Bible scholar and passage searching expert. The Bible is a very large book making specific verses difficult to find.
 Users will provide a prompt or question, and you will search for the relevant verses.
@@ -171,6 +176,83 @@ secondary_passages=[]
 """
 
 client = OpenAI()
+
+# Global cache for testimonies data
+testimonies_data = None
+
+def load_testimonies_data():
+    """Load testimonies data from JSONL file with caching."""
+    global testimonies_data
+    if testimonies_data is None:
+        try:
+            testimonies_data = []
+            with open('testimonies.jsonl', 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        testimonies_data.append(json.loads(line))
+            logger.info(f"Loaded {len(testimonies_data)} testimonies into memory cache")
+        except Exception as e:
+            logger.error(f"Failed to load testimonies data: {e}")
+            testimonies_data = []
+    return testimonies_data
+
+def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
+    """Simple, efficient search through testimonies content."""
+    testimonies = load_testimonies_data()
+    if not testimonies:
+        return []
+    
+    results = []
+    search_terms_lower = [term.lower() for term in search_terms]
+    
+    for testimony in testimonies:
+        content = testimony.get('content', '').lower()
+        hit_count = sum(content.count(term) for term in search_terms_lower)
+        
+        if hit_count > 0:
+            results.append({
+                'filename': testimony.get('filename', ''),
+                'link': testimony.get('link', ''),
+                'hitCount': hit_count
+            })
+    
+    # Sort by hit count (descending)
+    results.sort(key=lambda x: x['hitCount'], reverse=True)
+    return results
+
+def parse_testimonies_search(user_text: str) -> TestimoniesSearchQuery:
+    """
+    Send the user query text to the LLM and parse the response into a TestimoniesSearchQuery.
+    """
+    system_prompt = """\
+You are a Christian testimonies reading expert. When a user provides a search term, you should:
+1. Take the user's input term.
+2. Generate a list of three to five similar or related terms (strings) that would help find relevant testimonies.
+
+For example:
+- User input: "leukemia" → terms: ["blood cancer", "bone marrow", "leukemic"]
+- User input: "argentena" → terms: ["argentina", "south america", "spanish"]
+- User input: "car accident" → terms: ["crash", "accident", "vehicle", "car", "drive"]
+
+Return a TestimoniesSearchQuery object with:
+- terms: a list of three strings (the similar/related terms).
+"""
+    try:
+        logger.info(f"Making API call for testimonies search with term: {user_text}")
+        response = client.beta.chat.completions.parse(
+            model="gpt-5-nano-2025-08-07",
+            reasoning_effort="low",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text},
+            ],
+            response_format=TestimoniesSearchQuery,
+        )
+        logger.info("Testimonies search API call completed successfully")
+        return response.choices[0].message.parsed
+    except Exception as e:
+        logger.error(f"Testimonies search API call failed: {str(e)}")
+        raise
 
 def parse_passages(user_text: str, result_count: str = "few", content_type: str = "verses", model_type: str = "fast") -> PassageQuery:
     """
@@ -293,7 +375,54 @@ async def search_endpoint(
         logger.error(f"   Error type: {type(e).__name__}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.get("/testimonies-search")
+async def testimonies_search_endpoint(query: str = ""):
+    """Search through testimonies using AI-powered term expansion."""
+    import time
+    from datetime import datetime
+    
+    start_time = time.time()
+    timestamp = datetime.now().isoformat()
+    
+    # Enhanced logging with request details
+    logger.info(f"🔍 TESTIMONIES SEARCH REQUEST [{timestamp}]")
+    logger.info(f"   Query: '{query}'")
+    
+    try:
+        if not query:
+            logger.warning("❌ Missing query parameter")
+            return JSONResponse(content={"error": "Missing query parameter"}, status_code=400)
 
+        logger.info("🤖 Calling OpenAI API for term expansion...")
+        search_query = parse_testimonies_search(query)
+        
+        logger.info("🔍 Searching testimonies content...")
+        search_terms = [query] + search_query.terms
+        results = search_testimonies_content(search_terms)
+        
+        response = {
+            "searchTerms": search_terms,
+            "results": results
+        }
+        
+        # Calculate processing time
+        processing_time = time.time() - start_time
+        
+        # Enhanced success logging
+        logger.info(f"✅ TESTIMONIES SEARCH SUCCESS [{timestamp}]")
+        logger.info(f"   Processing time: {processing_time:.2f}s")
+        logger.info(f"   Search terms: {search_terms}")
+        logger.info(f"   Found {len(results)} testimonies")
+        
+        return JSONResponse(content=response, status_code=200)
+        
+    except Exception as e:
+        processing_time = time.time() - start_time
+        logger.error(f"❌ TESTIMONIES SEARCH ERROR [{timestamp}]")
+        logger.error(f"   Processing time: {processing_time:.2f}s")
+        logger.error(f"   Error: {str(e)}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 def main():
     """Entry point for the application."""
