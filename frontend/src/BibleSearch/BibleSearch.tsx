@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Text, Box, Button, Loader, Textarea, Paper, Group, Divider, SegmentedControl, Stack, ScrollArea, Collapse } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
-import { useChat, ChatMessage } from '../contexts/ChatContext';
+import { useBibleChat, ChatMessage } from '../contexts/BibleChatContext';
 import { API_CONFIG } from '../config/api';
 
 
@@ -25,7 +25,11 @@ export default function AIBibleSearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nkjv, setNKJV] = useState<any>(null);
-  const { chatHistory, addMessage, toggleMessageCollapse, clearChat, exportChatHistory } = useChat();
+  const { chatHistory, addMessage, toggleMessageCollapse, clearChat, exportChatHistory } = useBibleChat();
+  
+  // Debug logging
+  console.log('BibleSearch - chatHistory length:', chatHistory.length);
+  console.log('BibleSearch - chatHistory:', chatHistory);
   const nkjvLoaded = useRef(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
@@ -36,7 +40,7 @@ export default function AIBibleSearch() {
 
   // Load NKJV.json only once
   const loadNKJV = async () => {
-    if (nkjvLoaded.current) return;
+    if (nkjvLoaded.current) return nkjv;
     const res = await fetch('data/NKJV.json');
     if (!res.ok) throw new Error('Failed to load NKJV.json');
     const data = await res.json();
@@ -64,7 +68,8 @@ export default function AIBibleSearch() {
     try {
       // Load NKJV if not loaded
       if (!nkjvLoaded.current) {
-        await loadNKJV();
+        const nkjvData = await loadNKJV();
+        setNKJV(nkjvData);
       }
       
       // Build search parameters

@@ -14,7 +14,7 @@ export interface ChatMessage {
   collapsed?: boolean;
 }
 
-interface ChatContextType {
+interface BibleChatContextType {
   chatHistory: ChatMessage[];
   setChatHistory: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -23,31 +23,37 @@ interface ChatContextType {
   exportChatHistory: () => void;
 }
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined);
+const BibleChatContext = createContext<BibleChatContextType | undefined>(undefined);
 
-export const useChat = () => {
-  const context = useContext(ChatContext);
+export const useBibleChat = () => {
+  const context = useContext(BibleChatContext);
   if (context === undefined) {
-    throw new Error('useChat must be used within a ChatProvider');
+    throw new Error('useBibleChat must be used within a BibleChatProvider');
   }
   return context;
 };
 
-interface ChatProviderProps {
+interface BibleChatProviderProps {
   children: ReactNode;
 }
 
-export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
+export const BibleChatProvider: React.FC<BibleChatProviderProps> = ({ children }) => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
 
   const addMessage = (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    console.log('BibleChatContext - addMessage called with:', message);
     const newMessage: ChatMessage = {
       ...message,
       id: Date.now().toString(),
       timestamp: new Date(),
-      collapsed: false // Default to expanded
+      collapsed: false
     };
-    setChatHistory(prev => [...prev, newMessage]);
+    console.log('BibleChatContext - newMessage created:', newMessage);
+    setChatHistory(prev => {
+      const updated = [...prev, newMessage];
+      console.log('BibleChatContext - chatHistory updated:', updated);
+      return updated;
+    });
   };
 
   const toggleMessageCollapse = (messageId: string) => {
@@ -70,7 +76,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       return;
     }
 
-    // Group messages into triplets (user query, settings, assistant response)
     const triplets: Array<{
       query: string;
       settings: any;
@@ -90,11 +95,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       }
     }
 
-    // Create filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const filename = `bible-search-chat-${timestamp}.json`;
 
-    // Create and download the file
     const dataStr = JSON.stringify(triplets, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     
@@ -107,7 +110,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     URL.revokeObjectURL(link.href);
   };
 
-  const value: ChatContextType = {
+  const value: BibleChatContextType = {
     chatHistory,
     setChatHistory,
     addMessage,
@@ -117,8 +120,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   };
 
   return (
-    <ChatContext.Provider value={value}>
+    <BibleChatContext.Provider value={value}>
       {children}
-    </ChatContext.Provider>
+    </BibleChatContext.Provider>
   );
 };

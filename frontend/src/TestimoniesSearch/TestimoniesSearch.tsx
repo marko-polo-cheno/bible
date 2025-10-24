@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Text, Box, Button, Loader, Textarea, Paper, Group, ScrollArea, Collapse, Stack } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
-import { useChat, ChatMessage } from '../contexts/ChatContext';
+import { useTestimoniesChat, ChatMessage } from '../contexts/TestimoniesChatContext';
 import { API_CONFIG } from '../config/api';
 
 interface TestimonyResult {
@@ -19,7 +19,7 @@ export default function TestimoniesSearch() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { chatHistory, addMessage, toggleMessageCollapse, clearChat, exportChatHistory } = useChat();
+  const { chatHistory, addMessage, toggleMessageCollapse, clearChat, exportChatHistory } = useTestimoniesChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const handleSearch = async () => {

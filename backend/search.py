@@ -23,6 +23,8 @@ app.add_middleware(
         "https://marko-polo-cheno.github.io",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
     ],
     allow_credentials=True,
     allow_methods=["*"],
