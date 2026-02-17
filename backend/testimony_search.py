@@ -180,7 +180,7 @@ Examples:
 - "car accident" → ["crash", "collision", "vehicle", "traffic", "hospital", "injury", "driving", "road", "emergency", "insurance"]
 - "洗禮" → ["受洗", "浸禮", "洗禮", "大水", "赦罪", "baptism", "悔改", "歸入基督", "重生", "水"]
 
-Use True Jesus Church terminology so if the user's search term is "Holy Spirit", do not suggest "Holy Ghost" or "Holy Ghosts".
+Use True Jesus Church terminology so if the user's search term is "Holy Spirit", do not suggest "Holy Ghost" or "Holy Ghosts", or "Baptism of Holy Spirit" as it is a substring, but "Fruit of the spirit" and "Speaking in tongue" are great suggestions.
 Always keep the terms in root format, so "speaking in tongues" should be "speaking in tongue".
 
 Return a TestimoniesSearchQuery object with:
@@ -189,11 +189,11 @@ Return a TestimoniesSearchQuery object with:
     try:
         logger.info(f"Making AI suggestion call for: {user_text}")
         response = client.beta.chat.completions.parse(
-            model="gpt-5-mini-2025-08-07",
+            model="gpt-5.2-2025-12-11",
             reasoning_effort="low",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text},
+                {"role": "user", "content": f"I'm searching for: {user_text}"},
             ],
             response_format=TestimoniesSearchQuery,
         )
