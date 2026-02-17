@@ -149,27 +149,28 @@ export default function TestimoniesSearch() {
     let suggestionsEnrichedFromSuggest: EnrichedTerm[] = [];
     let selectedFromSuggest = new Set<string>();
 
-    try {
-      const suggestParams = new URLSearchParams({ query: queryToUse });
-      const suggestRes = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_SUGGEST}?${suggestParams}`
-      );
-      if (suggestRes.ok) {
-        const suggestData: TestimoniesSuggestResponse = await suggestRes.json();
-        queryTermsEnrichedFromSuggest = suggestData.queryTerms ?? [];
-        suggestionsEnrichedFromSuggest = suggestData.suggestions ?? [];
-        selectedFromSuggest = new Set(suggestData.suggestions?.map(s => s.term) ?? []);
-        setQueryTermsEnriched(queryTermsEnrichedFromSuggest);
-        setSuggestionsEnriched(suggestionsEnrichedFromSuggest);
-        setSelectedSuggestions(selectedFromSuggest);
+    if (useAiSuggestions) {
+      try {
+        const suggestParams = new URLSearchParams({ query: queryToUse });
+        const suggestRes = await fetch(
+          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_SUGGEST}?${suggestParams}`
+        );
+        if (suggestRes.ok) {
+          const suggestData: TestimoniesSuggestResponse = await suggestRes.json();
+          queryTermsEnrichedFromSuggest = suggestData.queryTerms ?? [];
+          suggestionsEnrichedFromSuggest = suggestData.suggestions ?? [];
+          selectedFromSuggest = new Set(suggestData.suggestions?.map(s => s.term) ?? []);
+          setQueryTermsEnriched(queryTermsEnrichedFromSuggest);
+          setSuggestionsEnriched(suggestionsEnrichedFromSuggest);
+          setSelectedSuggestions(selectedFromSuggest);
+        }
+      } catch {
+        queryTermsEnrichedFromSuggest = [];
+        suggestionsEnrichedFromSuggest = [];
+        selectedFromSuggest = new Set();
       }
-    } catch {
-      queryTermsEnrichedFromSuggest = [];
-      suggestionsEnrichedFromSuggest = [];
-      selectedFromSuggest = new Set();
-    } finally {
-      setSuggesting(false);
     }
+    setSuggesting(false);
 
     const termsToSend = buildSearchTerms({
       queryTermsEnriched: queryTermsEnrichedFromSuggest,
@@ -186,11 +187,10 @@ export default function TestimoniesSearch() {
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data: TestimoniesSearchResponse = await res.json();
 
-      const searchTermsText = data.searchTerms.join(', ');
       const resultsText = data.results.length > 0
         ? `Found ${data.results.length} testimonies`
         : 'No testimonies found';
-      const summaryText = `Search terms: ${searchTermsText}${derivativesWereOn ? ' (+ derivatives)' : ''}\n\n${resultsText}`;
+      const summaryText = `Searched ${data.searchTerms.length} terms${derivativesWereOn ? ' (incl. derivatives)' : ''}. ${resultsText}.`;
 
       addMessage({ type: 'assistant', content: summaryText, result: { ...data, derivativesIncluded: derivativesWereOn } });
       setError(null);
@@ -294,42 +294,28 @@ export default function TestimoniesSearch() {
     );
   }
 
-  /** Render a single AI suggestion badge with optional derivative sub-badges. */
   function renderSuggestionBadge(sg: EnrichedTerm) {
     const isSelected = selectedSuggestions.has(sg.term);
     return (
-      <Box key={sg.term} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-        <Tooltip label={isSelected ? 'Click to exclude' : 'Click to include'} withArrow>
-          <Badge
-            variant={isSelected ? 'filled' : 'outline'}
-            color={isSelected ? 'blue' : 'gray'}
-            size="lg"
-            style={{ cursor: 'pointer', paddingRight: 3 }}
-            onClick={() => toggleSuggestion(sg.term)}
-            rightSection={
-              <CloseButton
-                size="xs"
-                variant="transparent"
-                c={isSelected ? 'white' : 'gray'}
-                onClick={(e) => { e.stopPropagation(); removeSuggestion(sg.term); }}
-              />
-            }
-          >
-            {sg.term}
-          </Badge>
-        </Tooltip>
-        {/* Show derivatives underneath when both the term is selected and derivatives toggle is on */}
-        {isSelected && includeDerivatives && sg.derivatives.length > 0 && (
-          <Group gap={3} ml={4} mt={2}>
-            {sg.derivatives.slice(0, 6).map(d => (
-              <Badge key={d} variant="light" color="grape" size="xs">{d}</Badge>
-            ))}
-            {sg.derivatives.length > 6 && (
-              <Badge variant="light" color="gray" size="xs">+{sg.derivatives.length - 6}</Badge>
-            )}
-          </Group>
-        )}
-      </Box>
+      <Tooltip key={sg.term} label={isSelected ? 'Click to exclude' : 'Click to include'} withArrow>
+        <Badge
+          variant={isSelected ? 'filled' : 'outline'}
+          color={isSelected ? 'blue' : 'gray'}
+          size="lg"
+          style={{ cursor: 'pointer', paddingRight: 3 }}
+          onClick={() => toggleSuggestion(sg.term)}
+          rightSection={
+            <CloseButton
+              size="xs"
+              variant="transparent"
+              c={isSelected ? 'white' : 'gray'}
+              onClick={(e) => { e.stopPropagation(); removeSuggestion(sg.term); }}
+            />
+          }
+        >
+          {sg.term}
+        </Badge>
+      </Tooltip>
     );
   }
 
@@ -360,7 +346,7 @@ export default function TestimoniesSearch() {
         </Group>
 
         {/* Options row */}
-        <Group gap="lg" mb={(useAiSuggestions && suggestionsEnriched.length > 0) || (includeDerivatives && queryTermsEnriched.length > 0) ? 'sm' : 0}>
+        <Group gap="lg" mb={useAiSuggestions && suggestionsEnriched.length > 0 ? 'sm' : 0}>
           <Switch
             label="Include word derivatives"
             description="Also match plurals, past tense, etc."
@@ -376,26 +362,6 @@ export default function TestimoniesSearch() {
             size="sm"
           />
         </Group>
-
-        {/* User query term derivatives preview (only when derivatives are on and we have data) */}
-        {includeDerivatives && queryTermsEnriched.length > 0 && (
-          <Box mb={useAiSuggestions && suggestionsEnriched.length > 0 ? 'sm' : 0}>
-            <Text size="xs" c="dimmed" mb={4}>Your terms + derivatives:</Text>
-            <Group gap={6} style={{ flexWrap: 'wrap' }}>
-              {queryTermsEnriched.map(qt => (
-                <Group key={qt.term} gap={3} style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Badge variant="filled" color="teal" size="md">{qt.term}</Badge>
-                  {qt.derivatives.slice(0, 5).map(d => (
-                    <Badge key={d} variant="light" color="teal" size="xs">{d}</Badge>
-                  ))}
-                  {qt.derivatives.length > 5 && (
-                    <Badge variant="light" color="gray" size="xs">+{qt.derivatives.length - 5}</Badge>
-                  )}
-                </Group>
-              ))}
-            </Group>
-          </Box>
-        )}
 
         {/* AI suggested terms */}
         {useAiSuggestions && (query.trim() || suggestionsEnriched.length > 0) && (
@@ -441,7 +407,7 @@ export default function TestimoniesSearch() {
       </Paper>
 
       {/* Chat Interface */}
-      <Box style={{ maxWidth: '66.67%', margin: '0 auto', height: '60vh', display: 'flex', flexDirection: 'column' }}>
+      <Box style={{ maxWidth: '66.67%', margin: '0 auto', height: 'calc(100vh - 180px)', display: 'flex', flexDirection: 'column' }}>
         {chatHistory.length === 0 ? (
           <Stack gap="lg" style={{ flex: 1, justifyContent: 'center' }}>
             <Paper shadow="xs" p="xl" radius="md" withBorder style={{ textAlign: 'center' }}>
