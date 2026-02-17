@@ -16,6 +16,7 @@ interface TestimonyResult {
 interface TestimoniesSearchResponse {
   searchTerms: string[];
   results: TestimonyResult[];
+  derivativesIncluded?: boolean;
 }
 
 /** A term with its pre-computed derivatives from the backend. */
@@ -48,47 +49,6 @@ export default function TestimoniesSearch() {
 
   const { chatHistory, addMessage, toggleMessageCollapse, clearChat, exportChatHistory } = useTestimoniesChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-
-  // Fetch AI suggestions + query-term derivatives when query changes
-  useEffect(() => {
-    if (!query.trim()) {
-      setQueryTermsEnriched([]);
-      setSuggestionsEnriched([]);
-      setSelectedSuggestions(new Set());
-      return;
-    }
-
-    // If AI suggestions are off we still want query-term derivatives,
-    // but we can skip the API call and compute nothing (derivatives
-    // for user terms are returned by the suggest endpoint too).
-    // For simplicity, always call the suggest endpoint — it returns
-    // queryTerms even when AI suggestions are shown or hidden.
-    // The frontend just hides the suggestions section when the toggle is off.
-
-    const debounce = setTimeout(async () => {
-      setSuggesting(true);
-      try {
-        const params = new URLSearchParams({ query: query.trim() });
-        const res = await fetch(
-          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_SUGGEST}?${params}`
-        );
-        if (!res.ok) throw new Error(`API error: ${res.status}`);
-        const data: TestimoniesSuggestResponse = await res.json();
-
-        setQueryTermsEnriched(data.queryTerms ?? []);
-        setSuggestionsEnriched(data.suggestions ?? []);
-        setSelectedSuggestions(new Set(data.suggestions.map(s => s.term)));
-      } catch {
-        setQueryTermsEnriched([]);
-        setSuggestionsEnriched([]);
-        setSelectedSuggestions(new Set());
-      } finally {
-        setSuggesting(false);
-      }
-    }, 600);
-
-    return () => clearTimeout(debounce);
-  }, [query]);
 
   // When AI toggle is turned off, deselect all suggestions (but keep data cached)
   useEffect(() => {
@@ -123,11 +83,19 @@ export default function TestimoniesSearch() {
 
   /**
    * Assemble the final flat term list that gets sent to /testimonies-search.
-   *
-   * Order: user's query terms first, then selected AI terms alphabetically.
-   * If "include derivatives" is on, each term is followed by its derivatives.
+   * When override is provided (e.g. from suggest response in handleSearch), use it; else use state.
    */
-  function buildSearchTerms(): string[] {
+  function buildSearchTerms(override?: {
+    queryTermsEnriched: EnrichedTerm[];
+    suggestionsEnriched: EnrichedTerm[];
+    selectedSuggestions: Set<string>;
+    query: string;
+  }): string[] {
+    const qTerms = override?.queryTermsEnriched ?? queryTermsEnriched;
+    const sEnriched = override?.suggestionsEnriched ?? suggestionsEnriched;
+    const sel = override?.selectedSuggestions ?? selectedSuggestions;
+    const q = override?.query ?? query;
+
     const terms: string[] = [];
     const seen = new Set<string>();
 
@@ -139,25 +107,22 @@ export default function TestimoniesSearch() {
       }
     };
 
-    // 1. User's own query terms (preserve their typed order)
-    for (const qt of queryTermsEnriched) {
+    for (const qt of qTerms) {
       addUnique(qt.term);
       if (includeDerivatives) {
         for (const d of qt.derivatives) addUnique(d);
       }
     }
 
-    // Fallback: if suggest hasn't returned yet, parse query directly
-    if (queryTermsEnriched.length === 0) {
-      for (const t of query.trim().split(/\s*,\s*/).filter(Boolean)) {
+    if (qTerms.length === 0) {
+      for (const t of q.trim().split(/\s*,\s*/).filter(Boolean)) {
         addUnique(t);
       }
     }
 
-    // 2. Selected AI suggestions (alphabetically — they come pre-sorted from backend)
     if (useAiSuggestions) {
-      for (const sg of suggestionsEnriched) {
-        if (selectedSuggestions.has(sg.term)) {
+      for (const sg of sEnriched) {
+        if (sel.has(sg.term)) {
           addUnique(sg.term);
           if (includeDerivatives) {
             for (const d of sg.derivatives) addUnique(d);
@@ -174,18 +139,45 @@ export default function TestimoniesSearch() {
 
     setLoading(true);
     setError(null);
+    setSuggesting(true);
 
-    const searchTerms = buildSearchTerms();
-
+    const queryToUse = query.trim();
+    const derivativesWereOn = includeDerivatives;
     addMessage({ type: 'user', content: query });
 
-    // Snapshot before clearing
-    const termsToSend = searchTerms;
-    const derivativesWereOn = includeDerivatives;
+    let queryTermsEnrichedFromSuggest: EnrichedTerm[] = [];
+    let suggestionsEnrichedFromSuggest: EnrichedTerm[] = [];
+    let selectedFromSuggest = new Set<string>();
+
+    try {
+      const suggestParams = new URLSearchParams({ query: queryToUse });
+      const suggestRes = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_SUGGEST}?${suggestParams}`
+      );
+      if (suggestRes.ok) {
+        const suggestData: TestimoniesSuggestResponse = await suggestRes.json();
+        queryTermsEnrichedFromSuggest = suggestData.queryTerms ?? [];
+        suggestionsEnrichedFromSuggest = suggestData.suggestions ?? [];
+        selectedFromSuggest = new Set(suggestData.suggestions?.map(s => s.term) ?? []);
+        setQueryTermsEnriched(queryTermsEnrichedFromSuggest);
+        setSuggestionsEnriched(suggestionsEnrichedFromSuggest);
+        setSelectedSuggestions(selectedFromSuggest);
+      }
+    } catch {
+      queryTermsEnrichedFromSuggest = [];
+      suggestionsEnrichedFromSuggest = [];
+      selectedFromSuggest = new Set();
+    } finally {
+      setSuggesting(false);
+    }
+
+    const termsToSend = buildSearchTerms({
+      queryTermsEnriched: queryTermsEnrichedFromSuggest,
+      suggestionsEnriched: suggestionsEnrichedFromSuggest,
+      selectedSuggestions: selectedFromSuggest,
+      query: queryToUse,
+    });
     setQuery("");
-    setQueryTermsEnriched([]);
-    setSuggestionsEnriched([]);
-    setSelectedSuggestions(new Set());
 
     try {
       const params = new URLSearchParams({ terms: termsToSend.join(",") });
@@ -200,7 +192,7 @@ export default function TestimoniesSearch() {
         : 'No testimonies found';
       const summaryText = `Search terms: ${searchTermsText}${derivativesWereOn ? ' (+ derivatives)' : ''}\n\n${resultsText}`;
 
-      addMessage({ type: 'assistant', content: summaryText, result: data });
+      addMessage({ type: 'assistant', content: summaryText, result: { ...data, derivativesIncluded: derivativesWereOn } });
       setError(null);
     } catch (err: any) {
       const errorMessage = err.message || 'Unknown error';
@@ -283,17 +275,12 @@ export default function TestimoniesSearch() {
               </Button>
               <Collapse in={!isCollapsed}>
                 <Box>
-                  <Text size="lg" fw="bold" mb="sm">Search Terms</Text>
-                  <Group gap="xs" mb="md" style={{ flexWrap: 'wrap' }}>
-                    {(message.result as TestimoniesSearchResponse).searchTerms.slice(0, 30).map((term, i) => (
-                      <Badge key={i} variant="light" color="blue" size="md">{term}</Badge>
-                    ))}
-                    {(message.result as TestimoniesSearchResponse).searchTerms.length > 30 && (
-                      <Badge variant="light" color="gray" size="md">
-                        +{(message.result as TestimoniesSearchResponse).searchTerms.length - 30} more
-                      </Badge>
+                  <Text size="sm" c="dimmed" mb="md">
+                    Search used {(message.result as TestimoniesSearchResponse).searchTerms.length} terms.
+                    {(message.result as TestimoniesSearchResponse).derivativesIncluded && (
+                      <> Derivatives were included in the search but are not listed here.</>
                     )}
-                  </Group>
+                  </Text>
                   <Text size="lg" fw="bold" mb="sm">Testimonies</Text>
                   <Box style={styles.verseDisplay} mb="sm">
                     {renderTestimoniesResults((message.result as TestimoniesSearchResponse).results, isCollapsed)}
@@ -411,7 +398,7 @@ export default function TestimoniesSearch() {
         )}
 
         {/* AI suggested terms */}
-        {useAiSuggestions && query.trim() && (
+        {useAiSuggestions && (query.trim() || suggestionsEnriched.length > 0) && (
           <Box>
             {suggesting ? (
               <Group gap="xs">

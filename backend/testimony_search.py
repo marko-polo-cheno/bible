@@ -134,7 +134,8 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
                     testimony = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                content = testimony.get("content", "").lower()
+                raw = testimony.get("content", "").lower()
+                content = (raw[:5000] + raw[-5000:]) if len(raw) > 10000 else raw
                 hit_count = sum(content.count(term) for term in unique_terms)
                 if hit_count > 0:
                     results.append({
@@ -153,7 +154,7 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
 def suggest_terms(user_text: str) -> List[Dict[str, Any]]:
     system_prompt = """\
 You are a keyword brainstorming assistant for a religious article archive (True Jesus Church).
-Given a user's search term, generate approximately 10 related words or terms that someone might use when describing the same topic in a personal testimony or article.
+Given a user's search term, generate approximately 5-7 related words or terms that someone might use when describing the same topic in a personal testimony or article.
 
 Think broadly: include synonyms, related concepts, common collocations, and terms from adjacent topics. For terms in Chinese, include both simplified and traditional variants where they differ.
 
@@ -163,8 +164,11 @@ Examples:
 - "car accident" → ["crash", "collision", "vehicle", "traffic", "hospital", "injury", "driving", "road", "emergency", "insurance"]
 - "洗禮" → ["受洗", "浸禮", "洗禮", "大水", "赦罪", "baptism", "悔改", "歸入基督", "重生", "水"]
 
+Use True Jesus Church terminology so if the user's search term is "Holy Spirit", do not suggest "Holy Ghost" or "Holy Ghosts".
+Always keep the terms in root format, so "speaking in tongues" should be "speaking in tongue".
+
 Return a TestimoniesSearchQuery object with:
-- terms: a list of approximately 10 related terms, ideally single words/concepts that are directly related to the user's search term.
+- terms: a list of approximately 5-7 related terms, ideally single words/concepts that are directly related to the user's search term.
 """
     try:
         logger.info(f"Making AI suggestion call for: {user_text}")
