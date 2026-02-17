@@ -151,16 +151,9 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
 
 
 def suggest_terms(user_text: str) -> List[Dict[str, Any]]:
-    """
-    Use AI to suggest ~10 related search terms, then attach pre-computed
-    derivatives to each so the frontend never needs a second LLM call.
-
-    Returns a list of {"term": str, "derivatives": [str, ...]} dicts,
-    sorted alphabetically by term.
-    """
     system_prompt = """\
-You are a keyword brainstorming assistant for a religious testimony archive (True Jesus Church).
-Given a user's search term, generate approximately 10 related words or short phrases that someone might use when describing the same topic in a personal testimony or sermon.
+You are a keyword brainstorming assistant for a religious article archive (True Jesus Church).
+Given a user's search term, generate approximately 10 related words or terms that someone might use when describing the same topic in a personal testimony or article.
 
 Think broadly: include synonyms, related concepts, common collocations, and terms from adjacent topics. For terms in Chinese, include both simplified and traditional variants where they differ.
 
@@ -171,7 +164,7 @@ Examples:
 - "洗禮" → ["受洗", "浸禮", "洗禮", "大水", "赦罪", "baptism", "悔改", "歸入基督", "重生", "水"]
 
 Return a TestimoniesSearchQuery object with:
-- terms: a list of approximately 10 related terms.
+- terms: a list of approximately 10 related terms, ideally single words/concepts that are directly related to the user's search term.
 """
     try:
         logger.info(f"Making AI suggestion call for: {user_text}")
