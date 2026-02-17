@@ -70,9 +70,9 @@ def parse_passages(user_text: str, result_count: str = "few", content_type: str 
     Send the user query text to the LLM and parse the response into a PassageQuery.
     """
     if model_type == "fast":
-        model = "gpt-5-nano-2025-08-07"
+        model = "gpt-5-mini-2025-08-07"
     else:
-        model = "gpt-5-2025-08-07"
+        model = "gpt-5.2-2025-12-11"
 
     system_prompt = SYSTEM_PROMPT
     if content_type == "verses":

@@ -14,6 +14,9 @@ testimonies_data = None
 
 JSONL_PATH = Path(__file__).parent / "testimonies.jsonl"
 
+# Common English suffixes for generating word derivatives
+SUFFIXES = ["s", "es", "ed", "d", "ing", "er", "ers", "ly", "tion", "sion", "ment", "ness", "ful", "less", "ous", "ive", "al", "ity"]
+
 
 def load_testimonies_data() -> list:
     """Load testimonies data from JSONL file with caching."""
@@ -32,18 +35,62 @@ def load_testimonies_data() -> list:
     return testimonies_data
 
 
+def generate_derivatives(word: str) -> List[str]:
+    """Generate common English derivatives of a word (plural, past tense, gerund, etc.)."""
+    word = word.strip().lower()
+    if not word or len(word) < 2:
+        return []
+
+    derivatives = set()
+    for suffix in SUFFIXES:
+        derivatives.add(word + suffix)
+
+    # Handle words ending in 'e' (e.g., "hope" -> "hoping", "hoped")
+    if word.endswith("e"):
+        derivatives.add(word[:-1] + "ing")
+        derivatives.add(word + "d")
+        derivatives.add(word[:-1] + "ation")
+
+    # Handle words ending in 'y' (e.g., "pray" -> "prays", "prayed", "praying", "prayer")
+    if word.endswith("y"):
+        derivatives.add(word[:-1] + "ies")
+        derivatives.add(word[:-1] + "ied")
+        derivatives.add(word[:-1] + "ier")
+
+    # Handle consonant doubling (e.g., "sin" -> "sinning", "sinned")
+    if len(word) >= 3 and word[-1] not in "aeiouwy" and word[-2] in "aeiou" and word[-3] not in "aeiou":
+        derivatives.add(word + word[-1] + "ing")
+        derivatives.add(word + word[-1] + "ed")
+        derivatives.add(word + word[-1] + "er")
+
+    # Remove the original word if it snuck in
+    derivatives.discard(word)
+    return sorted(derivatives)
+
+
 def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
-    """Simple, efficient search through testimonies content."""
+    """Search through testimonies content with an explicit flat list of terms.
+
+    The caller (frontend) is responsible for assembling the full term list
+    including any derivatives or AI suggestions the user selected.
+    """
     testimonies = load_testimonies_data()
     if not testimonies:
         return []
 
-    results = []
-    search_terms_lower = [term.lower() for term in search_terms]
+    # Deduplicate while preserving order
+    seen = set()
+    unique_terms = []
+    for t in search_terms:
+        t_lower = t.lower()
+        if t_lower not in seen:
+            seen.add(t_lower)
+            unique_terms.append(t_lower)
 
+    results = []
     for testimony in testimonies:
         content = testimony.get("content", "").lower()
-        hit_count = sum(content.count(term) for term in search_terms_lower)
+        hit_count = sum(content.count(term) for term in unique_terms)
 
         if hit_count > 0:
             results.append({
@@ -56,27 +103,33 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
     return results
 
 
-def parse_testimonies_search(user_text: str) -> TestimoniesSearchQuery:
+def suggest_terms(user_text: str) -> List[Dict[str, Any]]:
     """
-    Send the user query text to the LLM and parse the response into a TestimoniesSearchQuery.
+    Use AI to suggest ~10 related search terms, then attach pre-computed
+    derivatives to each so the frontend never needs a second LLM call.
+
+    Returns a list of {"term": str, "derivatives": [str, ...]} dicts,
+    sorted alphabetically by term.
     """
     system_prompt = """\
-You are a Christian testimonies reading expert. When a user provides a search term, you should:
-1. Take the user's input term.
-2. Generate a list of three to five similar or related terms (strings) that would help find relevant testimonies.
+You are a keyword brainstorming assistant for a religious testimony archive (True Jesus Church).
+Given a user's search term, generate approximately 10 related words or short phrases that someone might use when describing the same topic in a personal testimony or sermon.
 
-For example:
-- User input: "leukemia" → terms: ["blood cancer", "bone marrow", "leukemic"]
-- User input: "argentena" → terms: ["argentina", "south america", "spanish"]
-- User input: "car accident" → terms: ["crash", "accident", "vehicle", "car", "drive"]
+Think broadly: include synonyms, related concepts, common collocations, and terms from adjacent topics. For terms in Chinese, include both simplified and traditional variants where they differ.
+
+Examples:
+- "exam" → ["test", "school", "study", "grade", "midterm", "finals", "stress", "report card", "student", "academic"]
+- "leukemia" → ["blood cancer", "bone marrow", "chemotherapy", "cancer", "hospital", "diagnosis", "healing", "remission", "white blood cells", "treatment"]
+- "car accident" → ["crash", "collision", "vehicle", "traffic", "hospital", "injury", "driving", "road", "emergency", "insurance"]
+- "洗禮" → ["受洗", "浸禮", "洗禮", "大水", "赦罪", "baptism", "悔改", "歸入基督", "重生", "水"]
 
 Return a TestimoniesSearchQuery object with:
-- terms: a list of three strings (the similar/related terms).
+- terms: a list of approximately 10 related terms.
 """
     try:
-        logger.info(f"Making API call for testimonies search with term: {user_text}")
+        logger.info(f"Making AI suggestion call for: {user_text}")
         response = client.beta.chat.completions.parse(
-            model="gpt-5-nano-2025-08-07",
+            model="gpt-5-mini-2025-08-07",
             reasoning_effort="low",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -84,8 +137,15 @@ Return a TestimoniesSearchQuery object with:
             ],
             response_format=TestimoniesSearchQuery,
         )
-        logger.info("Testimonies search API call completed successfully")
-        return response.choices[0].message.parsed
+        logger.info("AI suggestion call completed successfully")
+        raw_terms = response.choices[0].message.parsed.terms
+
+        # Attach derivatives to each term and sort alphabetically
+        enriched = sorted(
+            [{"term": t, "derivatives": generate_derivatives(t)} for t in raw_terms],
+            key=lambda x: x["term"].lower(),
+        )
+        return enriched
     except Exception as e:
-        logger.error(f"Testimonies search API call failed: {str(e)}")
+        logger.error(f"AI suggestion call failed: {str(e)}")
         raise

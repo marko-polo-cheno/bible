@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from bible_search import parse_passages
 from testimony_search import (
     search_testimonies_content,
-    parse_testimonies_search,
+    suggest_terms,
+    generate_derivatives,
 )
 
 app = FastAPI()
@@ -144,25 +145,84 @@ async def search_endpoint(
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.get("/testimonies-search")
-async def testimonies_search_endpoint(query: str = ""):
-    """Search through testimonies using AI-powered term expansion."""
+@app.get("/testimonies-suggest")
+async def testimonies_suggest_endpoint(query: str = ""):
+    """Get AI-suggested related search terms with pre-computed derivatives.
+
+    Also returns derivatives for the user's own query terms so the frontend
+    can toggle derivative visibility without any additional API calls.
+
+    Returns:
+        {
+            "queryTerms": [{"term": str, "derivatives": [str, ...]}, ...],
+            "suggestions": [{"term": str, "derivatives": [str, ...]}, ...]
+        }
+    queryTerms: the user's own input terms with their derivatives.
+    suggestions: AI-suggested terms sorted alphabetically, each with derivatives.
+    """
     start_time = time.time()
     timestamp = datetime.now().isoformat()
 
-    logger.info(f"TESTIMONIES SEARCH REQUEST [{timestamp}]")
+    logger.info(f"TESTIMONIES SUGGEST REQUEST [{timestamp}]")
     logger.info(f"   Query: '{query}'")
 
     try:
         if not query:
-            logger.warning("Missing query parameter")
             return JSONResponse(content={"error": "Missing query parameter"}, status_code=400)
 
-        logger.info("Calling OpenAI API for term expansion...")
-        search_query = parse_testimonies_search(query)
+        # Compute derivatives for the user's own query terms
+        user_terms = [t.strip() for t in query.split(",") if t.strip()]
+        query_terms = [
+            {"term": t, "derivatives": generate_derivatives(t)}
+            for t in user_terms
+        ]
 
-        logger.info("Searching testimonies content...")
-        search_terms = [query] + search_query.terms
+        # Get AI suggestions (each already has derivatives, sorted alphabetically)
+        suggestions = suggest_terms(query)
+
+        processing_time = time.time() - start_time
+        logger.info(f"TESTIMONIES SUGGEST SUCCESS [{timestamp}]")
+        logger.info(f"   Processing time: {processing_time:.2f}s")
+        logger.info(f"   Query terms: {[q['term'] for q in query_terms]}")
+        logger.info(f"   Suggested: {[s['term'] for s in suggestions]}")
+
+        return JSONResponse(content={
+            "queryTerms": query_terms,
+            "suggestions": suggestions,
+        }, status_code=200)
+
+    except Exception as e:
+        processing_time = time.time() - start_time
+        logger.error(f"TESTIMONIES SUGGEST ERROR [{timestamp}]")
+        logger.error(f"   Error: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/testimonies-search")
+async def testimonies_search_endpoint(terms: str = ""):
+    """Search testimonies with an explicit flat list of terms.
+
+    The frontend assembles the final term list (user terms + selected AI terms
+    + derivatives if the user toggled that on) and sends them comma-separated.
+    No AI call happens here — just keyword matching.
+
+    Args:
+        terms: Comma-separated list of all search terms to match.
+    """
+    start_time = time.time()
+    timestamp = datetime.now().isoformat()
+
+    logger.info(f"TESTIMONIES SEARCH REQUEST [{timestamp}]")
+    logger.info(f"   Terms: '{terms}'")
+
+    try:
+        if not terms:
+            return JSONResponse(content={"error": "Missing terms parameter"}, status_code=400)
+
+        search_terms = [t.strip() for t in terms.split(",") if t.strip()]
+        if not search_terms:
+            return JSONResponse(content={"error": "No valid search terms"}, status_code=400)
+
         results = search_testimonies_content(search_terms)
 
         response = {
@@ -174,7 +234,7 @@ async def testimonies_search_endpoint(query: str = ""):
 
         logger.info(f"TESTIMONIES SEARCH SUCCESS [{timestamp}]")
         logger.info(f"   Processing time: {processing_time:.2f}s")
-        logger.info(f"   Search terms: {search_terms}")
+        logger.info(f"   Search terms ({len(search_terms)}): {search_terms[:10]}{'...' if len(search_terms) > 10 else ''}")
         logger.info(f"   Found {len(results)} testimonies")
 
         return JSONResponse(content=response, status_code=200)
@@ -182,9 +242,7 @@ async def testimonies_search_endpoint(query: str = ""):
     except Exception as e:
         processing_time = time.time() - start_time
         logger.error(f"TESTIMONIES SEARCH ERROR [{timestamp}]")
-        logger.error(f"   Processing time: {processing_time:.2f}s")
         logger.error(f"   Error: {str(e)}")
-        logger.error(f"   Error type: {type(e).__name__}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
