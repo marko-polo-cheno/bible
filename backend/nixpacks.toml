@@ -1,10 +1,10 @@
 [phases.setup]
-nixPkgs = ["git-lfs"]
+nixPkgs = ["python3", "gcc", "git-lfs"]
 
 [phases.install]
 cmds = [
   "if grep -q 'version https://git-lfs.github.com/spec/v1' testimonies.jsonl; then echo 'LFS pointer detected, downloading real file...'; curl -L https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies.jsonl -o testimonies.jsonl; fi",
-  "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install poetry==$NIXPACKS_POETRY_VERSION && poetry install --no-dev --no-interaction --no-ansi"
+  "python3 -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install poetry==$NIXPACKS_POETRY_VERSION && poetry install --no-dev --no-interaction --no-ansi"
 ]
 
 [start]
