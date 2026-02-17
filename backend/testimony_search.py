@@ -2,6 +2,7 @@ import json
 from typing import List, Dict, Any
 from pathlib import Path
 
+import requests as http_requests
 from loguru import logger
 from openai import OpenAI
 
@@ -18,24 +19,46 @@ JSONL_PATH = Path(__file__).parent / "testimonies.jsonl"
 SUFFIXES = ["s", "es", "ed", "d", "ing", "er", "ers", "ly", "tion", "sion", "ment", "ness", "ful", "less", "ous", "ive", "al", "ity"]
 
 
+TESTIMONIES_URL = (
+    "https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies.jsonl"
+)
+
+
+def _download_testimonies():
+    logger.info(f"Downloading testimonies.jsonl from GitHub...")
+    resp = http_requests.get(TESTIMONIES_URL, timeout=120)
+    resp.raise_for_status()
+    JSONL_PATH.write_bytes(resp.content)
+    logger.info(f"Downloaded testimonies.jsonl ({len(resp.content)} bytes)")
+
+
+def _is_lfs_pointer() -> bool:
+    try:
+        with open(JSONL_PATH, "r", encoding="utf-8") as f:
+            first_line = f.readline()
+        return "git-lfs.github.com" in first_line
+    except FileNotFoundError:
+        return True
+
+
 def load_testimonies_data() -> list:
     global testimonies_data
     if testimonies_data is not None:
         return testimonies_data
 
     testimonies_data = []
-    try:
-        with open(JSONL_PATH, "r", encoding="utf-8") as f:
-            first_line = f.readline()
-            if "git-lfs.github.com" in first_line:
-                logger.error(
-                    f"testimonies.jsonl is a Git LFS pointer, not actual data! "
-                    f"First line: {first_line.strip()}"
-                )
-                return testimonies_data
 
-            f.seek(0)
-            bad_lines = 0
+    if _is_lfs_pointer():
+        logger.warning("testimonies.jsonl is missing or is a Git LFS pointer")
+        try:
+            _download_testimonies()
+        except Exception as e:
+            logger.error(f"Failed to download testimonies.jsonl: {e}")
+            return testimonies_data
+
+    try:
+        bad_lines = 0
+        with open(JSONL_PATH, "r", encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:
