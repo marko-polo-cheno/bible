@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 from typing import List, Dict, Any
 from pathlib import Path
@@ -109,6 +110,19 @@ def generate_derivatives(word: str) -> List[str]:
     return sorted(derivatives)
 
 
+_RE_PATTERN = re.compile(r"(Elementary|Junior)\s+\d+\s+Year\s+\d+\s+Book\s+\d+", re.IGNORECASE)
+
+
+def classify_testimony(filename: str) -> str:
+    if any("\u4e00" <= c <= "\u9fff" or "\u3400" <= c <= "\u4dbf" for c in filename):
+        return "Chinese"
+    if _RE_PATTERN.search(filename):
+        return "RE"
+    if "?" in filename:
+        return "FAQ"
+    return "other"
+
+
 def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
     ensure_testimonies_file()
 
@@ -138,10 +152,12 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
                 content = (raw[:5000] + raw[-5000:]) if len(raw) > 10000 else raw
                 hit_count = sum(content.count(term) for term in unique_terms)
                 if hit_count > 0:
+                    fname = testimony.get("filename", "")
                     results.append({
-                        "filename": testimony.get("filename", ""),
+                        "filename": fname,
                         "link": testimony.get("link", ""),
                         "hitCount": hit_count,
+                        "tag": classify_testimony(fname),
                     })
     except Exception as e:
         logger.error(f"Error searching testimonies: {e}")

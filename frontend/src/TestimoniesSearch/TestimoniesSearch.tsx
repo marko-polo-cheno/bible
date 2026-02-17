@@ -11,7 +11,16 @@ interface TestimonyResult {
   filename: string;
   link: string;
   hitCount: number;
+  tag: string;
 }
+
+const ALL_TAGS = ["FAQ", "RE", "Chinese", "other"] as const;
+const TAG_COLORS: Record<string, string> = {
+  FAQ: "violet",
+  RE: "teal",
+  Chinese: "orange",
+  other: "gray",
+};
 
 interface TestimoniesSearchResponse {
   searchTerms: string[];
@@ -40,6 +49,21 @@ export default function TestimoniesSearch() {
   // Search options
   const [includeDerivatives, setIncludeDerivatives] = useState(false);
   const [useAiSuggestions, setUseAiSuggestions] = useState(true);
+
+  // Tag filters (all included by default)
+  const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(new Set(ALL_TAGS));
+
+  const toggleTagFilter = (tag: string) => {
+    setActiveTagFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(tag)) {
+        next.delete(tag);
+      } else {
+        next.add(tag);
+      }
+      return next;
+    });
+  };
 
   // Data from /testimonies-suggest (derivatives pre-computed for everything)
   const [queryTermsEnriched, setQueryTermsEnriched] = useState<EnrichedTerm[]>([]);
@@ -220,12 +244,18 @@ export default function TestimoniesSearch() {
     if (!results || results.length === 0) return <Text>No testimonies found.</Text>;
     if (isCollapsed) return <Text size="sm" c="dimmed">{results.length} testimonies found</Text>;
 
+    const filtered = results.filter(r => activeTagFilters.has(r.tag));
+    if (filtered.length === 0) return <Text size="sm" c="dimmed">No testimonies match the active filters.</Text>;
+
     return (
       <>
-        {results.slice(0, 10).map((result, idx) => (
+        {filtered.slice(0, 10).map((result, idx) => (
           <Paper key={`${result.filename}-${idx}`} shadow="xs" p="sm" mb="sm" radius="md" withBorder>
             <Group justify="space-between" mb="xs">
-              <Text size="md" fw="bold">{result.filename}</Text>
+              <Group gap="xs">
+                <Text size="md" fw="bold">{result.filename}</Text>
+                <Badge size="sm" variant="light" color={TAG_COLORS[result.tag] || 'gray'}>{result.tag}</Badge>
+              </Group>
               <Text size="sm" c="blue">{result.hitCount} hits</Text>
             </Group>
             {result.link && (
@@ -237,9 +267,9 @@ export default function TestimoniesSearch() {
             )}
           </Paper>
         ))}
-        {results.length > 10 && (
+        {filtered.length > 10 && (
           <Text size="sm" c="dimmed" mt="sm">
-            ... and {results.length - 10} more testimonies
+            ... and {filtered.length - 10} more testimonies
           </Text>
         )}
       </>
@@ -393,7 +423,7 @@ export default function TestimoniesSearch() {
 
       {/* Settings bar */}
       <Paper shadow="xs" p="md" mb="md" radius="md" withBorder>
-        <Group justify="space-between">
+        <Group justify="space-between" mb="xs">
           <Text size="sm" c="dimmed">
             Search through 21,000+ testimonies and publications
           </Text>
@@ -403,6 +433,24 @@ export default function TestimoniesSearch() {
               <Button variant="outline" size="xs" color="red" onClick={clearChat}>Clear History</Button>
             </Group>
           )}
+        </Group>
+        <Group gap={8}>
+          <Text size="xs" c="dimmed">Filter:</Text>
+          {ALL_TAGS.map(tag => {
+            const isActive = activeTagFilters.has(tag);
+            return (
+              <Badge
+                key={tag}
+                variant={isActive ? 'filled' : 'outline'}
+                color={isActive ? TAG_COLORS[tag] : 'gray'}
+                size="lg"
+                style={{ cursor: 'pointer' }}
+                onClick={() => toggleTagFilter(tag)}
+              >
+                {tag}
+              </Badge>
+            );
+          })}
         </Group>
       </Paper>
 
