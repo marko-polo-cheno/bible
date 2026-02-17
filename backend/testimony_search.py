@@ -19,19 +19,42 @@ SUFFIXES = ["s", "es", "ed", "d", "ing", "er", "ers", "ly", "tion", "sion", "men
 
 
 def load_testimonies_data() -> list:
-    """Load testimonies data from JSONL file with caching."""
     global testimonies_data
-    if testimonies_data is None:
-        try:
-            testimonies_data = []
-            with open(JSONL_PATH, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        testimonies_data.append(json.loads(line))
-            logger.info(f"Loaded {len(testimonies_data)} testimonies into memory cache")
-        except Exception as e:
-            logger.error(f"Failed to load testimonies data: {e}")
-            testimonies_data = []
+    if testimonies_data is not None:
+        return testimonies_data
+
+    testimonies_data = []
+    try:
+        with open(JSONL_PATH, "r", encoding="utf-8") as f:
+            first_line = f.readline()
+            if "git-lfs.github.com" in first_line:
+                logger.error(
+                    f"testimonies.jsonl is a Git LFS pointer, not actual data! "
+                    f"First line: {first_line.strip()}"
+                )
+                return testimonies_data
+
+            f.seek(0)
+            bad_lines = 0
+            for i, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    testimonies_data.append(json.loads(line))
+                except json.JSONDecodeError:
+                    bad_lines += 1
+                    if bad_lines <= 3:
+                        logger.error(f"Bad JSON on line {i}: {line[:100]}")
+
+        logger.info(
+            f"Loaded {len(testimonies_data)} testimonies "
+            f"({bad_lines} bad lines skipped)"
+        )
+    except FileNotFoundError:
+        logger.error(f"testimonies.jsonl not found at {JSONL_PATH}")
+    except Exception as e:
+        logger.error(f"Failed to load testimonies data: {e}")
     return testimonies_data
 
 

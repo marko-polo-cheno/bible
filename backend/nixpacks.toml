@@ -3,7 +3,7 @@ nixPkgs = ["python3", "gcc", "git-lfs"]
 
 [phases.install]
 cmds = [
-  "if grep -q 'version https://git-lfs.github.com/spec/v1' testimonies.jsonl; then echo 'LFS pointer detected, downloading real file...'; curl -L https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies.jsonl -o testimonies.jsonl; fi",
+  "echo '=== testimonies.jsonl check ===' && head -c 1 testimonies.jsonl && echo '' && head -c 1 testimonies.jsonl | grep -q '{' && echo 'File is valid JSONL' || (echo 'File is NOT valid JSONL, downloading...' && curl -fSL --retry 3 -o testimonies.jsonl https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies.jsonl && echo 'Download done, first char:' && head -c 1 testimonies.jsonl && echo '' && wc -l testimonies.jsonl)",
   "python3 -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install poetry==$NIXPACKS_POETRY_VERSION && poetry install --no-dev --no-interaction --no-ansi"
 ]
 
