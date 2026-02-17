@@ -1,4 +1,5 @@
 import json
+import threading
 from typing import List, Dict, Any
 from pathlib import Path
 
@@ -19,6 +20,7 @@ TESTIMONIES_URL = (
 )
 
 _file_ready = False
+_file_lock = threading.Lock()
 
 
 def _download_testimonies():
@@ -47,27 +49,31 @@ def ensure_testimonies_file() -> int:
     if _file_ready:
         return -1
 
-    if _is_lfs_pointer():
-        logger.warning("testimonies.jsonl is missing or is a Git LFS pointer")
+    with _file_lock:
+        if _file_ready:
+            return -1
+
+        if _is_lfs_pointer():
+            logger.warning("testimonies.jsonl is missing or is a Git LFS pointer")
+            try:
+                _download_testimonies()
+            except Exception as e:
+                logger.error(f"Failed to download testimonies.jsonl: {e}")
+                return 0
+
+        count = 0
         try:
-            _download_testimonies()
+            with open(JSONL_PATH, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        count += 1
+            logger.info(f"testimonies.jsonl validated: {count} entries")
         except Exception as e:
-            logger.error(f"Failed to download testimonies.jsonl: {e}")
+            logger.error(f"Failed to validate testimonies.jsonl: {e}")
             return 0
 
-    count = 0
-    try:
-        with open(JSONL_PATH, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    count += 1
-        logger.info(f"testimonies.jsonl validated: {count} entries")
-    except Exception as e:
-        logger.error(f"Failed to validate testimonies.jsonl: {e}")
-        return 0
-
-    _file_ready = True
-    return count
+        _file_ready = True
+        return count
 
 
 def generate_derivatives(word: str) -> List[str]:

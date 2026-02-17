@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -18,17 +19,20 @@ from testimony_search import (
 )
 
 
+def _bg_prepare_testimonies():
+    try:
+        count = ensure_testimonies_file()
+        logger.info(f"[BG] Testimonies file ready ({count} entries)")
+    except Exception as e:
+        logger.error(f"[BG] Failed to prepare testimonies: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     port = os.environ.get("PORT", "not set")
     logger.info(f"[STARTUP] PORT env var = {port}")
-    logger.info("[STARTUP] Ensuring testimonies file is ready...")
-    try:
-        count = ensure_testimonies_file()
-        logger.info(f"[STARTUP] Testimonies file ready ({count} entries)")
-    except Exception as e:
-        logger.error(f"[STARTUP] Failed to prepare testimonies: {e}")
-    logger.info("[STARTUP] Application ready to serve requests")
+    threading.Thread(target=_bg_prepare_testimonies, daemon=True).start()
+    logger.info("[STARTUP] Application ready (testimonies downloading in background)")
     yield
     logger.info("[SHUTDOWN] Application shutting down")
 
