@@ -14,7 +14,7 @@ from testimony_search import (
     search_testimonies_content,
     suggest_terms,
     generate_derivatives,
-    load_testimonies_data,
+    ensure_testimonies_file,
 )
 
 
@@ -22,12 +22,12 @@ from testimony_search import (
 async def lifespan(app: FastAPI):
     port = os.environ.get("PORT", "not set")
     logger.info(f"[STARTUP] PORT env var = {port}")
-    logger.info(f"[STARTUP] Preloading testimonies data...")
+    logger.info("[STARTUP] Ensuring testimonies file is ready...")
     try:
-        data = load_testimonies_data()
-        logger.info(f"[STARTUP] Loaded {len(data)} testimonies successfully")
+        count = ensure_testimonies_file()
+        logger.info(f"[STARTUP] Testimonies file ready ({count} entries)")
     except Exception as e:
-        logger.error(f"[STARTUP] Failed to preload testimonies: {e}")
+        logger.error(f"[STARTUP] Failed to prepare testimonies: {e}")
     logger.info("[STARTUP] Application ready to serve requests")
     yield
     logger.info("[SHUTDOWN] Application shutting down")

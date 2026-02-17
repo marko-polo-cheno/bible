@@ -10,26 +10,27 @@ from models import TestimoniesSearchQuery
 
 client = OpenAI()
 
-# Global cache for testimonies data
-testimonies_data = None
-
 JSONL_PATH = Path(__file__).parent / "testimonies.jsonl"
 
-# Common English suffixes for generating word derivatives
 SUFFIXES = ["s", "es", "ed", "d", "ing", "er", "ers", "ly", "tion", "sion", "ment", "ness", "ful", "less", "ous", "ive", "al", "ity"]
-
 
 TESTIMONIES_URL = (
     "https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies.jsonl"
 )
 
+_file_ready = False
+
 
 def _download_testimonies():
-    logger.info(f"Downloading testimonies.jsonl from GitHub...")
-    resp = http_requests.get(TESTIMONIES_URL, timeout=120)
+    logger.info("Downloading testimonies.jsonl from GitHub...")
+    resp = http_requests.get(TESTIMONIES_URL, timeout=120, stream=True)
     resp.raise_for_status()
-    JSONL_PATH.write_bytes(resp.content)
-    logger.info(f"Downloaded testimonies.jsonl ({len(resp.content)} bytes)")
+    size = 0
+    with open(JSONL_PATH, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+            size += len(chunk)
+    logger.info(f"Downloaded testimonies.jsonl ({size} bytes)")
 
 
 def _is_lfs_pointer() -> bool:
@@ -41,12 +42,10 @@ def _is_lfs_pointer() -> bool:
         return True
 
 
-def load_testimonies_data() -> list:
-    global testimonies_data
-    if testimonies_data is not None:
-        return testimonies_data
-
-    testimonies_data = []
+def ensure_testimonies_file() -> int:
+    global _file_ready
+    if _file_ready:
+        return -1
 
     if _is_lfs_pointer():
         logger.warning("testimonies.jsonl is missing or is a Git LFS pointer")
@@ -54,31 +53,21 @@ def load_testimonies_data() -> list:
             _download_testimonies()
         except Exception as e:
             logger.error(f"Failed to download testimonies.jsonl: {e}")
-            return testimonies_data
+            return 0
 
+    count = 0
     try:
-        bad_lines = 0
         with open(JSONL_PATH, "r", encoding="utf-8") as f:
-            for i, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    testimonies_data.append(json.loads(line))
-                except json.JSONDecodeError:
-                    bad_lines += 1
-                    if bad_lines <= 3:
-                        logger.error(f"Bad JSON on line {i}: {line[:100]}")
-
-        logger.info(
-            f"Loaded {len(testimonies_data)} testimonies "
-            f"({bad_lines} bad lines skipped)"
-        )
-    except FileNotFoundError:
-        logger.error(f"testimonies.jsonl not found at {JSONL_PATH}")
+            for line in f:
+                if line.strip():
+                    count += 1
+        logger.info(f"testimonies.jsonl validated: {count} entries")
     except Exception as e:
-        logger.error(f"Failed to load testimonies data: {e}")
-    return testimonies_data
+        logger.error(f"Failed to validate testimonies.jsonl: {e}")
+        return 0
+
+    _file_ready = True
+    return count
 
 
 def generate_derivatives(word: str) -> List[str]:
@@ -115,16 +104,8 @@ def generate_derivatives(word: str) -> List[str]:
 
 
 def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
-    """Search through testimonies content with an explicit flat list of terms.
+    ensure_testimonies_file()
 
-    The caller (frontend) is responsible for assembling the full term list
-    including any derivatives or AI suggestions the user selected.
-    """
-    testimonies = load_testimonies_data()
-    if not testimonies:
-        return []
-
-    # Deduplicate while preserving order
     seen = set()
     unique_terms = []
     for t in search_terms:
@@ -133,17 +114,31 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
             seen.add(t_lower)
             unique_terms.append(t_lower)
 
-    results = []
-    for testimony in testimonies:
-        content = testimony.get("content", "").lower()
-        hit_count = sum(content.count(term) for term in unique_terms)
+    if not unique_terms:
+        return []
 
-        if hit_count > 0:
-            results.append({
-                "filename": testimony.get("filename", ""),
-                "link": testimony.get("link", ""),
-                "hitCount": hit_count,
-            })
+    results = []
+    try:
+        with open(JSONL_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    testimony = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                content = testimony.get("content", "").lower()
+                hit_count = sum(content.count(term) for term in unique_terms)
+                if hit_count > 0:
+                    results.append({
+                        "filename": testimony.get("filename", ""),
+                        "link": testimony.get("link", ""),
+                        "hitCount": hit_count,
+                    })
+    except Exception as e:
+        logger.error(f"Error searching testimonies: {e}")
+        return []
 
     results.sort(key=lambda x: x["hitCount"], reverse=True)
     return results
