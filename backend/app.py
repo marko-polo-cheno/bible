@@ -15,6 +15,7 @@ from testimony_search import (
     search_testimonies_content,
     suggest_terms,
     generate_derivatives,
+    get_categories,
     ensure_testimonies_file,
 )
 
@@ -168,40 +169,44 @@ async def search_endpoint(
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.get("/testimonies-suggest")
-async def testimonies_suggest_endpoint(query: str = ""):
-    """Get AI-suggested related search terms with pre-computed derivatives.
-
-    Also returns derivatives for the user's own query terms so the frontend
-    can toggle derivative visibility without any additional API calls.
-
-    Returns:
-        {
-            "queryTerms": [{"term": str, "derivatives": [str, ...]}, ...],
-            "suggestions": [{"term": str, "derivatives": [str, ...]}, ...]
-        }
-    queryTerms: the user's own input terms with their derivatives.
-    suggestions: AI-suggested terms sorted alphabetically, each with derivatives.
-    """
+@app.get("/testimonies-categories")
+async def testimonies_categories_endpoint(lang_id: int = 1):
     start_time = time.time()
     timestamp = datetime.now().isoformat()
 
+    logger.info(f"TESTIMONIES CATEGORIES REQUEST [{timestamp}] lang_id={lang_id}")
+
+    try:
+        categories = get_categories(lang_id)
+        processing_time = time.time() - start_time
+        logger.info(f"TESTIMONIES CATEGORIES SUCCESS [{timestamp}] {len(categories)} categories in {processing_time:.2f}s")
+        return JSONResponse(content={"categories": categories}, status_code=200)
+    except Exception as e:
+        processing_time = time.time() - start_time
+        logger.error(f"TESTIMONIES CATEGORIES ERROR [{timestamp}] {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/testimonies-suggest")
+async def testimonies_suggest_endpoint(query: str = "", lang: str = "en"):
+    start_time = time.time()
+    timestamp = datetime.now().isoformat()
+    is_chinese = lang == "zh"
+
     logger.info(f"TESTIMONIES SUGGEST REQUEST [{timestamp}]")
-    logger.info(f"   Query: '{query}'")
+    logger.info(f"   Query: '{query}', lang: '{lang}'")
 
     try:
         if not query:
             return JSONResponse(content={"error": "Missing query parameter"}, status_code=400)
 
-        # Compute derivatives for the user's own query terms
         user_terms = [t.strip() for t in query.split(",") if t.strip()]
         query_terms = [
-            {"term": t, "derivatives": generate_derivatives(t)}
+            {"term": t, "derivatives": [] if is_chinese else generate_derivatives(t)}
             for t in user_terms
         ]
 
-        # Get AI suggestions (each already has derivatives, sorted alphabetically)
-        suggestions = suggest_terms(query)
+        suggestions = suggest_terms(query, lang=lang)
 
         processing_time = time.time() - start_time
         logger.info(f"TESTIMONIES SUGGEST SUCCESS [{timestamp}]")
@@ -222,21 +227,16 @@ async def testimonies_suggest_endpoint(query: str = ""):
 
 
 @app.get("/testimonies-search")
-async def testimonies_search_endpoint(terms: str = ""):
-    """Search testimonies with an explicit flat list of terms.
-
-    The frontend assembles the final term list (user terms + selected AI terms
-    + derivatives if the user toggled that on) and sends them comma-separated.
-    No AI call happens here — just keyword matching.
-
-    Args:
-        terms: Comma-separated list of all search terms to match.
-    """
+async def testimonies_search_endpoint(
+    terms: str = "",
+    lang_id: int = 1,
+    category: str | None = None,
+):
     start_time = time.time()
     timestamp = datetime.now().isoformat()
 
     logger.info(f"TESTIMONIES SEARCH REQUEST [{timestamp}]")
-    logger.info(f"   Terms: '{terms}'")
+    logger.info(f"   Terms: '{terms}', lang_id: {lang_id}, category: '{category}'")
 
     try:
         if not terms:
@@ -246,7 +246,11 @@ async def testimonies_search_endpoint(terms: str = ""):
         if not search_terms:
             return JSONResponse(content={"error": "No valid search terms"}, status_code=400)
 
-        results = search_testimonies_content(search_terms)
+        results = search_testimonies_content(
+            search_terms,
+            lang_id=lang_id,
+            category=category if category else None,
+        )
 
         response = {
             "searchTerms": search_terms,

@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Text, Box, Button, Loader, Textarea, Paper, Group, ScrollArea,
-  Collapse, Stack, Switch, Badge, CloseButton, Tooltip
+  Collapse, Stack, Switch, Badge, CloseButton, Tooltip,
+  SegmentedControl, Select
 } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
 import { useTestimoniesChat, ChatMessage } from '../contexts/TestimoniesChatContext';
@@ -11,16 +12,7 @@ interface TestimonyResult {
   filename: string;
   link: string;
   hitCount: number;
-  tag: string;
 }
-
-const ALL_TAGS = ["FAQ", "RE", "Chinese", "other"] as const;
-const TAG_COLORS: Record<string, string> = {
-  FAQ: "violet",
-  RE: "teal",
-  Chinese: "orange",
-  other: "gray",
-};
 
 interface TestimoniesSearchResponse {
   searchTerms: string[];
@@ -50,20 +42,13 @@ export default function TestimoniesSearch() {
   const [includeDerivatives, setIncludeDerivatives] = useState(false);
   const [useAiSuggestions, setUseAiSuggestions] = useState(true);
 
-  // Tag filters (all included by default)
-  const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(new Set(ALL_TAGS));
+  // Language & category filters
+  const [langId, setLangId] = useState<number>(1);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const toggleTagFilter = (tag: string) => {
-    setActiveTagFilters(prev => {
-      const next = new Set(prev);
-      if (next.has(tag)) {
-        next.delete(tag);
-      } else {
-        next.add(tag);
-      }
-      return next;
-    });
-  };
+  const lang = langId === 2 ? "zh" : "en";
+  const isChinese = langId === 2;
 
   // Data from /testimonies-suggest (derivatives pre-computed for everything)
   const [queryTermsEnriched, setQueryTermsEnriched] = useState<EnrichedTerm[]>([]);
@@ -74,12 +59,43 @@ export default function TestimoniesSearch() {
   const { chatHistory, addMessage, toggleMessageCollapse, clearChat, exportChatHistory } = useTestimoniesChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  const fetchCategories = useCallback(async (lid: number) => {
+    try {
+      const params = new URLSearchParams({ lang_id: String(lid) });
+      const res = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_CATEGORIES}?${params}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data.categories ?? []);
+      }
+    } catch {
+      setCategories([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCategories(langId);
+  }, [langId, fetchCategories]);
+
+  const handleLanguageChange = useCallback((value: string) => {
+    const newLangId = value === "Chinese" ? 2 : 1;
+    setLangId(newLangId);
+    setSelectedCategory(null);
+    setQuery("");
+    setQueryTermsEnriched([]);
+    setSuggestionsEnriched([]);
+    setSelectedSuggestions(new Set());
+    setIncludeDerivatives(false);
+    setError(null);
+    clearChat();
+  }, [clearChat]);
+
   // When AI toggle is turned off, deselect all suggestions (but keep data cached)
   useEffect(() => {
     if (!useAiSuggestions) {
       setSelectedSuggestions(new Set());
     } else {
-      // Re-select all when toggled back on
       setSelectedSuggestions(new Set(suggestionsEnriched.map(s => s.term)));
     }
   }, [useAiSuggestions]);
@@ -175,7 +191,7 @@ export default function TestimoniesSearch() {
 
     if (useAiSuggestions) {
       try {
-        const suggestParams = new URLSearchParams({ query: queryToUse });
+        const suggestParams = new URLSearchParams({ query: queryToUse, lang });
         const suggestRes = await fetch(
           `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_SUGGEST}?${suggestParams}`
         );
@@ -205,7 +221,11 @@ export default function TestimoniesSearch() {
     setQuery("");
 
     try {
-      const params = new URLSearchParams({ terms: termsToSend.join(",") });
+      const params = new URLSearchParams({
+        terms: termsToSend.join(","),
+        lang_id: String(langId),
+      });
+      if (selectedCategory) params.set("category", selectedCategory);
       const apiUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_SEARCH}?${params}`;
       const res = await fetch(apiUrl);
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -244,18 +264,12 @@ export default function TestimoniesSearch() {
     if (!results || results.length === 0) return <Text>No testimonies found.</Text>;
     if (isCollapsed) return <Text size="sm" c="dimmed">{results.length} testimonies found</Text>;
 
-    const filtered = results.filter(r => activeTagFilters.has(r.tag));
-    if (filtered.length === 0) return <Text size="sm" c="dimmed">No testimonies match the active filters.</Text>;
-
     return (
       <>
-        {filtered.slice(0, 10).map((result, idx) => (
+        {results.slice(0, 10).map((result, idx) => (
           <Paper key={`${result.filename}-${idx}`} shadow="xs" p="sm" mb="sm" radius="md" withBorder>
             <Group justify="space-between" mb="xs">
-              <Group gap="xs">
-                <Text size="md" fw="bold">{result.filename}</Text>
-                <Badge size="sm" variant="light" color={TAG_COLORS[result.tag] || 'gray'}>{result.tag}</Badge>
-              </Group>
+              <Text size="md" fw="bold">{result.filename}</Text>
               <Text size="sm" c="blue">{result.hitCount} hits</Text>
             </Group>
             {result.link && (
@@ -267,9 +281,9 @@ export default function TestimoniesSearch() {
             )}
           </Paper>
         ))}
-        {filtered.length > 10 && (
+        {results.length > 10 && (
           <Text size="sm" c="dimmed" mt="sm">
-            ... and {filtered.length - 10} more testimonies
+            ... and {results.length - 10} more testimonies
           </Text>
         )}
       </>
@@ -377,13 +391,15 @@ export default function TestimoniesSearch() {
 
         {/* Options row */}
         <Group gap="lg" mb={useAiSuggestions && suggestionsEnriched.length > 0 ? 'sm' : 0}>
-          <Switch
-            label="Include word derivatives"
-            description="Also match plurals, past tense, etc."
-            checked={includeDerivatives}
-            onChange={e => setIncludeDerivatives(e.currentTarget.checked)}
-            size="sm"
-          />
+          {!isChinese && (
+            <Switch
+              label="Include word derivatives"
+              description="Also match plurals, past tense, etc."
+              checked={includeDerivatives}
+              onChange={e => setIncludeDerivatives(e.currentTarget.checked)}
+              size="sm"
+            />
+          )}
           <Switch
             label="AI suggested terms"
             description="Expand search with related words"
@@ -434,23 +450,28 @@ export default function TestimoniesSearch() {
             </Group>
           )}
         </Group>
-        <Group gap={8}>
-          <Text size="xs" c="dimmed">Filter:</Text>
-          {ALL_TAGS.map(tag => {
-            const isActive = activeTagFilters.has(tag);
-            return (
-              <Badge
-                key={tag}
-                variant={isActive ? 'filled' : 'outline'}
-                color={isActive ? TAG_COLORS[tag] : 'gray'}
-                size="lg"
-                style={{ cursor: 'pointer' }}
-                onClick={() => toggleTagFilter(tag)}
-              >
-                {tag}
-              </Badge>
-            );
-          })}
+        <Group gap="md" align="flex-end">
+          <Box>
+            <Text size="xs" c="dimmed" mb={4}>Language</Text>
+            <SegmentedControl
+              value={langId === 2 ? "Chinese" : "English"}
+              onChange={handleLanguageChange}
+              data={["English", "Chinese"]}
+              size="sm"
+            />
+          </Box>
+          <Select
+            label="Category"
+            placeholder="All categories"
+            data={categories}
+            value={selectedCategory}
+            onChange={setSelectedCategory}
+            clearable
+            searchable
+            size="sm"
+            style={{ minWidth: 220 }}
+            styles={{ label: { fontSize: 'var(--mantine-font-size-xs)', color: 'var(--mantine-color-dimmed)' } }}
+          />
         </Group>
       </Paper>
 

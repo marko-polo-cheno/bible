@@ -1,8 +1,8 @@
 import json
-import re
 import threading
 from typing import List, Dict, Any
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 
 import requests as http_requests
 from loguru import logger
@@ -110,20 +110,46 @@ def generate_derivatives(word: str) -> List[str]:
     return sorted(derivatives)
 
 
-_RE_PATTERN = re.compile(r"(Elementary|Junior)\s+\d+\s+Year\s+\d+\s+Book\s+\d+", re.IGNORECASE)
+def _extract_lang_id(link: str) -> int | None:
+    try:
+        qs = parse_qs(urlparse(link).query)
+        vals = qs.get("LangID") or qs.get("langid") or qs.get("langID")
+        if vals:
+            return int(vals[0])
+    except (ValueError, IndexError):
+        pass
+    return None
 
 
-def classify_testimony(filename: str) -> str:
-    if any("\u4e00" <= c <= "\u9fff" or "\u3400" <= c <= "\u4dbf" for c in filename):
-        return "Chinese"
-    if _RE_PATTERN.search(filename):
-        return "RE"
-    if "?" in filename:
-        return "FAQ"
-    return "other"
+def get_categories(lang_id: int) -> List[str]:
+    ensure_testimonies_file()
+    cats: set[str] = set()
+    try:
+        with open(JSONL_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if _extract_lang_id(entry.get("link", "")) != lang_id:
+                    continue
+                for c in entry.get("category", []):
+                    if c:
+                        cats.add(c)
+    except Exception as e:
+        logger.error(f"Error reading categories: {e}")
+        return []
+    return sorted(cats)
 
 
-def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
+def search_testimonies_content(
+    search_terms: List[str],
+    lang_id: int | None = None,
+    category: str | None = None,
+) -> List[Dict[str, Any]]:
     ensure_testimonies_file()
 
     seen = set()
@@ -148,16 +174,23 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
                     testimony = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+
+                if lang_id is not None:
+                    if _extract_lang_id(testimony.get("link", "")) != lang_id:
+                        continue
+
+                if category is not None:
+                    if category not in testimony.get("category", []):
+                        continue
+
                 raw = testimony.get("content", "").lower()
                 content = (raw[:5000] + raw[-5000:]) if len(raw) > 10000 else raw
                 hit_count = sum(content.count(term) for term in unique_terms)
                 if hit_count > 0:
-                    fname = testimony.get("filename", "")
                     results.append({
-                        "filename": fname,
+                        "filename": testimony.get("filename", ""),
                         "link": testimony.get("link", ""),
                         "hitCount": hit_count,
-                        "tag": classify_testimony(fname),
                     })
     except Exception as e:
         logger.error(f"Error searching testimonies: {e}")
@@ -167,18 +200,16 @@ def search_testimonies_content(search_terms: List[str]) -> List[Dict[str, Any]]:
     return results
 
 
-def suggest_terms(user_text: str) -> List[Dict[str, Any]]:
-    system_prompt = """\
+_SYSTEM_PROMPT_EN = """\
 You are a keyword brainstorming assistant for a religious article archive (True Jesus Church).
 Given a user's search term, generate approximately 4-6 related words or terms that someone might use when describing the same topic in a personal testimony or article.
 
-Think broadly: include synonyms, related concepts, common collocations, and terms from adjacent topics. For terms in Chinese, include both simplified and traditional variants where they differ.
+Think broadly: include synonyms, related concepts, common collocations, and terms from adjacent topics.
 
 Examples:
 - "exam" → ["test", "school", "study", "grade", "midterm", "finals", "stress", "report card", "student", "academic"]
 - "leukemia" → ["blood cancer", "bone marrow", "chemotherapy", "cancer", "hospital", "diagnosis", "healing", "remission", "white blood cells", "treatment"]
 - "car accident" → ["crash", "collision", "vehicle", "traffic", "hospital", "injury", "driving", "road", "emergency", "insurance"]
-- "洗禮" → ["受洗", "浸禮", "洗禮", "大水", "赦罪", "baptism", "悔改", "歸入基督", "重生", "水"]
 
 Use True Jesus Church terminology so if the user's search term is "Holy Spirit", do not suggest "Holy Ghost" or "Holy Ghosts", or "Baptism of Holy Spirit" as it is a substring, but "Fruit of the spirit" and "Speaking in tongue" are great suggestions.
 Always keep the terms in root format, so "speaking in tongues" should be "speaking in tongue".
@@ -186,8 +217,31 @@ Always keep the terms in root format, so "speaking in tongues" should be "speaki
 Return a TestimoniesSearchQuery object with:
 - terms: a list of approximately 4-6 related terms, ideally single words/concepts that are directly related to the user's search term.
 """
+
+_SYSTEM_PROMPT_ZH = """\
+你是一個真耶穌教會宗教文章庫的關鍵字聯想助手。
+根據使用者的搜尋詞，產生大約 4-6 個相關的中文詞彙或短語，這些詞彙是人們在個人見證或文章中描述同一主題時可能會使用的。
+
+廣泛思考：包含同義詞、相關概念、常見搭配和相鄰主題的詞彙。包含繁體和簡體中文的變體。
+
+範例：
+- "洗禮" → ["受洗", "浸禮", "大水", "赦罪", "悔改", "歸入基督", "重生"]
+- "聖靈" → ["方言禱告", "靈言", "寶惠師", "感動", "充滿", "恩賜"]
+- "安息日" → ["守安息", "十誡", "第七日", "聖日", "敬拜"]
+
+使用真耶穌教會的術語。所有建議的詞彙都必須是中文。
+
+回傳一個 TestimoniesSearchQuery 物件：
+- terms: 大約 4-6 個相關詞彙的列表。
+"""
+
+
+def suggest_terms(user_text: str, lang: str = "en") -> List[Dict[str, Any]]:
+    system_prompt = _SYSTEM_PROMPT_ZH if lang == "zh" else _SYSTEM_PROMPT_EN
+    is_chinese = lang == "zh"
+
     try:
-        logger.info(f"Making AI suggestion call for: {user_text}")
+        logger.info(f"Making AI suggestion call for: {user_text} (lang={lang})")
         response = client.beta.chat.completions.parse(
             model="gpt-5.2-2025-12-11",
             reasoning_effort="low",
@@ -200,9 +254,11 @@ Return a TestimoniesSearchQuery object with:
         logger.info("AI suggestion call completed successfully")
         raw_terms = response.choices[0].message.parsed.terms
 
-        # Attach derivatives to each term and sort alphabetically
         enriched = sorted(
-            [{"term": t, "derivatives": generate_derivatives(t)} for t in raw_terms],
+            [
+                {"term": t, "derivatives": [] if is_chinese else generate_derivatives(t)}
+                for t in raw_terms
+            ],
             key=lambda x: x["term"].lower(),
         )
         return enriched

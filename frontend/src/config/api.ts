@@ -6,5 +6,6 @@ export const API_CONFIG = {
     SEARCH: '/search',
     TESTIMONIES_SEARCH: '/testimonies-search',
     TESTIMONIES_SUGGEST: '/testimonies-suggest',
+    TESTIMONIES_CATEGORIES: '/testimonies-categories',
   }
 } as const;
