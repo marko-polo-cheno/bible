@@ -187,10 +187,14 @@ def search_testimonies_content(
                 content = (raw[:5000] + raw[-5000:]) if len(raw) > 10000 else raw
                 hit_count = sum(content.count(term) for term in unique_terms)
                 if hit_count > 0:
+                    full_content = testimony.get("content", "")
+                    preview = full_content[:180].rstrip() + ("..." if len(full_content) > 180 else "")
                     results.append({
                         "filename": testimony.get("filename", ""),
                         "link": testimony.get("link", ""),
                         "hitCount": hit_count,
+                        "preview": preview,
+                        "categories": testimony.get("category", []),
                     })
     except Exception as e:
         logger.error(f"Error searching testimonies: {e}")

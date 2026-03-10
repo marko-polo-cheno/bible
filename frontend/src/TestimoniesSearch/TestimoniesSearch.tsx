@@ -12,6 +12,8 @@ interface TestimonyResult {
   filename: string;
   link: string;
   hitCount: number;
+  preview: string;
+  categories: string[];
 }
 
 interface TestimoniesSearchResponse {
@@ -272,6 +274,16 @@ export default function TestimoniesSearch() {
               <Text size="md" fw="bold">{result.filename}</Text>
               <Text size="sm" c="blue">{result.hitCount} hits</Text>
             </Group>
+            {result.preview && (
+              <Text size="sm" c="dimmed" mb="xs" lineClamp={3}>{result.preview}</Text>
+            )}
+            {result.categories && result.categories.length > 0 && (
+              <Group gap={6} mb="xs">
+                {result.categories.map(cat => (
+                  <Badge key={cat} size="xs" variant="light" color="gray">{cat}</Badge>
+                ))}
+              </Group>
+            )}
             {result.link && (
               <Text size="sm" c="dimmed" style={{ wordBreak: 'break-all' }}>
                 <a href={result.link} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
