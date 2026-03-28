@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, Text, Box, Autocomplete } from '@mantine/core';
+import { Radio, Text, Box, Autocomplete, Switch, Group } from '@mantine/core';
 import { styles } from './BibleNavigator.styles';
 
 const verbose = true; // Set to true to enable debugging logs
@@ -14,17 +14,26 @@ interface BibleData {
   };
 }
 
+type VersionKey = 'pinyin' | 'chinese' | 'NKJV' | 'NASB';
+
 export function BibleNavigator() {
   const [bibleVersions, setBibleVersions] = useState<{ [version: string]: BibleData }>({});
   const [testament, setTestament] = useState<string>("new");
   const [book, setBook] = useState<string>("John");
   const [chapter, setChapter] = useState<string>("3");
   const [verseRange, setVerseRange] = useState<string>("16-17");
+  const [enabledVersions, setEnabledVersions] = useState<Record<VersionKey, boolean>>({
+    pinyin: true,
+    chinese: true,
+    NKJV: true,
+    NASB: true,
+  });
+  const [showEntireChapter, setShowEntireChapter] = useState<boolean>(false);
 
   useEffect(() => {
     const loadBibleVersions = async () => {
       try {
-        const versions = ['pinyin', 'chinese', 'NKJV'];
+        const versions = ['pinyin', 'chinese', 'NKJV', 'NASB'];
         const loadedVersions: [string, BibleData][] = await Promise.all(
           versions.map(async (version) => {
             const response = await fetch(`data/${version}.json`);
@@ -106,13 +115,14 @@ export function BibleNavigator() {
       return 'Invalid verse range selected.';
     }
 
-    const colors = ['#FFFFE0', '#E0FFFF', '#FFE0E0']; // Light yellow, blue, pink
+    const colors = ['#FFFFE0', '#E0FFFF', '#FFE0E0', '#E0FFE0']; // Light yellow, blue, pink, green
     const verses: string[] = [];
 
     for (let verseNum = start; verseNum <= end; verseNum++) {
       const verseContent: { [version: string]: string } = {};
 
       Object.entries(bibleVersions).forEach(([version, data]) => {
+        if (!enabledVersions[version as VersionKey]) return;
         try {
           Object.keys(data[testament] || {}).forEach((group) => {
             const chapterData = data[testament]?.[group]?.[book]?.[chapter] ?? {};
@@ -215,32 +225,64 @@ export function BibleNavigator() {
 
       {chapter && (
         <>
-          <Text mt="md">Select a Verse Range:</Text>
-          <div style={styles.flexContainer}>
-            <Radio.Group value={verseRange} onChange={setVerseRange}>
-              {generateVerseRanges(getAvailableVerses(firstVersion)).map((range) => (
-                <Radio
-                  value={range}
-                  label={range}
-                  key={range}
-                  styles={{
-                    root: styles.radioRoot,
-                    inner: styles.radioInner,
-                    label: styles.getRadioLabel(verseRange === range)
-                  }}
-                />
-              ))}
-            </Radio.Group>
-          </div>
+          <Text mt="md" fw="bold">Translations:</Text>
+          <Group gap="lg" mt={4} mb="md">
+            {(['NASB', 'NKJV', 'pinyin', 'chinese'] as VersionKey[]).map((v) => (
+              <Switch
+                key={v}
+                label={v}
+                checked={enabledVersions[v]}
+                onChange={(e) =>
+                  setEnabledVersions((prev) => ({ ...prev, [v]: e.currentTarget.checked }))
+                }
+              />
+            ))}
+          </Group>
+
+          <Switch
+            label="Entire Chapter"
+            checked={showEntireChapter}
+            onChange={(e) => setShowEntireChapter(e.currentTarget.checked)}
+            mb="md"
+          />
+
+          {!showEntireChapter && (
+            <>
+              <Text mt="md">Select a Verse Range:</Text>
+              <div style={styles.flexContainer}>
+                <Radio.Group value={verseRange} onChange={setVerseRange}>
+                  {generateVerseRanges(getAvailableVerses(firstVersion)).map((range) => (
+                    <Radio
+                      value={range}
+                      label={range}
+                      key={range}
+                      styles={{
+                        root: styles.radioRoot,
+                        inner: styles.radioInner,
+                        label: styles.getRadioLabel(verseRange === range)
+                      }}
+                    />
+                  ))}
+                </Radio.Group>
+              </div>
+            </>
+          )}
         </>
       )}
 
-      {chapter && verseRange && (
+      {chapter && (showEntireChapter || verseRange) && (
         <Box mt="md">
           <Text size="lg" fw="bold">
-            {book} {chapter}:{verseRange}
+            {book} {chapter}{showEntireChapter ? '' : `:${verseRange}`}
           </Text>
-          <div style={styles.verseDisplay} dangerouslySetInnerHTML={{ __html: displayVerses(verseRange) }} />
+          <div
+            style={styles.verseDisplay}
+            dangerouslySetInnerHTML={{
+              __html: showEntireChapter
+                ? displayVerses(`${getAvailableVerses(firstVersion)[0]}-${getAvailableVerses(firstVersion).slice(-1)[0]}`)
+                : displayVerses(verseRange),
+            }}
+          />
         </Box>
       )}
     </div>
