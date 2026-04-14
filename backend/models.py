@@ -48,3 +48,13 @@ class PassageQuery(BaseModel):
 
 class TestimoniesSearchQuery(BaseModel):
     terms: List[str]
+
+
+class TestimoniesUnifiedQuery(BaseModel):
+    """Structured output from the unified LLM call that auto-detects language, categories, and terms."""
+    lang_ids: List[int]
+    categories_en: List[str]
+    categories_zh: List[str]
+    terms_en: List[str]
+    terms_zh: List[str]
+    include_derivatives: bool

@@ -14,6 +14,7 @@ from bible_search import parse_passages
 from testimony_search import (
     search_testimonies_content,
     suggest_terms,
+    analyze_query,
     generate_derivatives,
     ensure_testimonies_file,
 )
@@ -226,11 +227,42 @@ async def testimonies_suggest_endpoint(query: str = "", lang: str = "en"):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
+@app.get("/testimonies-analyze")
+async def testimonies_analyze_endpoint(query: str = ""):
+    start_time = time.time()
+    timestamp = datetime.now().isoformat()
+
+    logger.info(f"TESTIMONIES ANALYZE REQUEST [{timestamp}]")
+    logger.info(f"   Query: '{query}'")
+
+    try:
+        if not query:
+            return JSONResponse(content={"error": "Missing query parameter"}, status_code=400)
+
+        result = analyze_query(query)
+
+        processing_time = time.time() - start_time
+        logger.info(f"TESTIMONIES ANALYZE SUCCESS [{timestamp}]")
+        logger.info(f"   Processing time: {processing_time:.2f}s")
+        logger.info(f"   Lang IDs: {result['langIds']}")
+        logger.info(f"   EN terms: {[t['term'] for t in result['termsEn']]}")
+        logger.info(f"   ZH terms: {[t['term'] for t in result['termsZh']]}")
+
+        return JSONResponse(content=result, status_code=200)
+
+    except Exception as e:
+        processing_time = time.time() - start_time
+        logger.error(f"TESTIMONIES ANALYZE ERROR [{timestamp}]")
+        logger.error(f"   Error: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
 @app.get("/testimonies-search")
 async def testimonies_search_endpoint(
     terms: str = "",
     lang_id: int = 1,
     categories: str | None = None,
+    snippets: bool = False,
 ):
     start_time = time.time()
     timestamp = datetime.now().isoformat()
@@ -251,6 +283,7 @@ async def testimonies_search_endpoint(
             search_terms,
             lang_id=lang_id,
             categories=cat_list,
+            generate_snippets=snippets,
         )
 
         response = {
