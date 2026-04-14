@@ -22,7 +22,7 @@ function toTreeData(nodes: CategoryNode[]): TreeNodeData[] {
   return nodes.map(n => ({
     label: n.name,
     value: n.value,
-    children: n.children.length > 0 ? toTreeData(n.children) : undefined,
+    children: n?.children?.length > 0 ? toTreeData(n.children) : undefined,
   }));
 }
 
@@ -30,10 +30,11 @@ function toTreeData(nodes: CategoryNode[]): TreeNodeData[] {
 function getAllLeafValues(nodes: CategoryNode[]): string[] {
   const leaves: string[] = [];
   for (const node of nodes) {
-    if (node.children.length === 0) {
+    const children = node.children ?? [];
+    if (children.length === 0) {
       leaves.push(node.value);
     } else {
-      leaves.push(...getAllLeafValues(node.children));
+      leaves.push(...getAllLeafValues(children));
     }
   }
   return leaves;
@@ -44,7 +45,7 @@ function getAllValues(nodes: CategoryNode[]): string[] {
   const values: string[] = [];
   for (const node of nodes) {
     values.push(node.value);
-    if (node.children.length > 0) {
+    if (node?.children?.length > 0) {
       values.push(...getAllValues(node.children));
     }
   }
@@ -55,7 +56,7 @@ function getAllValues(nodes: CategoryNode[]): string[] {
 function findNode(nodes: CategoryNode[], value: string): CategoryNode | null {
   for (const node of nodes) {
     if (node.value === value) return node;
-    if (node.children.length > 0) {
+    if (node?.children?.length > 0) {
       const found = findNode(node.children, value);
       if (found) return found;
     }
@@ -66,7 +67,7 @@ function findNode(nodes: CategoryNode[], value: string): CategoryNode | null {
 /** Get all descendant values of a node (including itself) */
 function getDescendantValues(node: CategoryNode): string[] {
   const values = [node.value];
-  for (const child of node.children) {
+  for (const child of (node.children ?? [])) {
     values.push(...getDescendantValues(child));
   }
   return values;
@@ -76,7 +77,7 @@ function getDescendantValues(node: CategoryNode): string[] {
 function getAncestorValues(nodes: CategoryNode[], targetValue: string, path: string[] = []): string[] | null {
   for (const node of nodes) {
     if (node.value === targetValue) return path;
-    if (node.children.length > 0) {
+    if (node?.children?.length > 0) {
       const result = getAncestorValues(node.children, targetValue, [...path, node.value]);
       if (result) return result;
     }
@@ -89,11 +90,12 @@ function getCheckState(
   node: CategoryNode,
   selectedSet: Set<string>,
 ): 'checked' | 'indeterminate' | 'unchecked' {
-  if (node.children.length === 0) {
+  const children = node.children ?? [];
+  if (children.length === 0) {
     return selectedSet.has(node.value) ? 'checked' : 'unchecked';
   }
 
-  const childStates = node.children.map(c => getCheckState(c, selectedSet));
+  const childStates = children.map(c => getCheckState(c, selectedSet));
   const allChecked = childStates.every(s => s === 'checked');
   const anyChecked = childStates.some(s => s === 'checked' || s === 'indeterminate');
 
@@ -114,7 +116,7 @@ export default function CategoryTreeSelect({ data, selectedValues, onChange }: C
     const node = findNode(data, value);
     if (!node) return;
 
-    const descendantLeaves = node.children.length > 0
+    const descendantLeaves = node?.children?.length > 0
       ? getAllLeafValues([node])
       : [node.value];
 
