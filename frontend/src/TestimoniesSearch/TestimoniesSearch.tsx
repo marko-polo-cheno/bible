@@ -109,17 +109,24 @@ export default function TestimoniesSearch() {
   };
 
   const handleSearch = async () => {
-    if (!query.trim() && activeTerms.length === 0 && manualTerms.length === 0) return;
+    const queryText = query.trim();
+    const hasManualTerms = manualTerms.length > 0 || activeTerms.length > 0;
+    if (!queryText && !hasManualTerms) return;
 
     setLoading(true);
     setError(null);
 
-    const queryText = query.trim();
+    // Determine if we should skip the LLM call and go straight to search
+    const hasAdvancedOverrides = advancedOpen && (manualLang !== "Auto" || manualTerms.length > 0 || selectedCategories.length > 0);
+    const skipLlm = hasAdvancedOverrides || (!queryText && hasManualTerms);
+
+    // Build chat message
     if (queryText) {
       addMessage({ type: 'user', content: queryText });
+    } else if (hasManualTerms) {
+      const termsList = [...new Set([...activeTerms.map(t => t.term), ...manualTerms])];
+      addMessage({ type: 'user', content: `Search: ${termsList.join(', ')}` });
     }
-
-    const isAdvancedManual = advancedOpen && manualLang !== "Auto";
 
     try {
       let langIds: number[] = [];
@@ -128,7 +135,7 @@ export default function TestimoniesSearch() {
       let termsToSearch: EnrichedTerm[] = [...activeTerms];
       let derivativesFlag = includeDerivatives;
 
-      if (queryText && !isAdvancedManual) {
+      if (!skipLlm && queryText) {
         // Use unified LLM analyze
         setAnalyzing(true);
         try {
@@ -139,7 +146,6 @@ export default function TestimoniesSearch() {
           if (analyzeRes.ok) {
             const analysis: AnalyzeResponse = await analyzeRes.json();
 
-            // Use LLM-detected values, but respect manual overrides
             langIds = analysis.langIds;
             searchCategoriesEn = analysis.categoriesEn;
             searchCategoriesZh = analysis.categoriesZh;
@@ -164,21 +170,21 @@ export default function TestimoniesSearch() {
               termsToSearch.push({ term: t, derivatives: [] });
             }
           }
-          langIds = [1]; // default to English
+          langIds = [1];
         }
         setAnalyzing(false);
-      } else if (isAdvancedManual) {
-        // Manual mode: use advanced settings
-        langIds = manualLang === "English" ? [1] : manualLang === "Chinese" ? [2] : [1, 2];
+      } else {
+        // Manual/direct mode: skip LLM, use what we have
+        langIds = manualLang === "English" ? [1] : manualLang === "Chinese" ? [2] : [1];
 
-        // Add manual terms as active terms
+        // Add manual terms from advanced config
         for (const t of manualTerms) {
           if (!termsToSearch.some(et => et.term.toLowerCase() === t.toLowerCase())) {
             termsToSearch.push({ term: t, derivatives: [] });
           }
         }
 
-        // If user typed a query, also parse it
+        // If user typed a query, parse as comma-separated terms
         if (queryText) {
           const parsed = queryText.split(/\s*,\s*/).filter(Boolean);
           for (const t of parsed) {
@@ -187,17 +193,13 @@ export default function TestimoniesSearch() {
             }
           }
         }
-      } else {
-        // No query text, just active terms — default to English
-        langIds = [1];
       }
 
-      // Override with advanced settings if set
+      // Override lang/categories with advanced settings when set
       if (advancedOpen && manualLang !== "Auto") {
         langIds = manualLang === "English" ? [1] : manualLang === "Chinese" ? [2] : [1, 2];
       }
       if (advancedOpen && selectedCategories.length > 0) {
-        // Use manually selected categories for all languages
         searchCategoriesEn = selectedCategories;
         searchCategoriesZh = selectedCategories;
       }
@@ -479,7 +481,7 @@ export default function TestimoniesSearch() {
             maxRows={4}
             size={size}
           />
-          <Button onClick={handleSearch} loading={loading} disabled={!query.trim() && activeTerms.length === 0} color="blue" size={size}>
+          <Button onClick={handleSearch} loading={loading} disabled={!query.trim() && activeTerms.length === 0 && manualTerms.length === 0} color="blue" size={size}>
             Search
           </Button>
         </Group>
