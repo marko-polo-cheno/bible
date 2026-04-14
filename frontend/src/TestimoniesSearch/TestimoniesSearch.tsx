@@ -2,11 +2,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Text, Box, Button, Loader, Textarea, Paper, Group, ScrollArea,
   Collapse, Stack, Switch, Badge, CloseButton, Tooltip,
-  SegmentedControl, Select
+  SegmentedControl,
 } from '@mantine/core';
 import { styles } from '../BibleNavigator/BibleNavigator.styles';
 import { useTestimoniesChat, ChatMessage } from '../contexts/TestimoniesChatContext';
 import { API_CONFIG } from '../config/api';
+import CategoryTreeSelect, { type CategoryNode } from './CategoryTreeSelect';
 
 interface TestimonyResult {
   filename: string;
@@ -42,12 +43,12 @@ export default function TestimoniesSearch() {
 
   // Search options
   const [includeDerivatives, setIncludeDerivatives] = useState(false);
-  const [useAiSuggestions, setUseAiSuggestions] = useState(true);
+  const [useAiSuggestions, setUseAiSuggestions] = useState(false);
 
   // Language & category filters
   const [langId, setLangId] = useState<number>(1);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
   const lang = langId === 2 ? "zh" : "en";
   const isChinese = langId === 2;
@@ -70,6 +71,7 @@ export default function TestimoniesSearch() {
       if (res.ok) {
         const data = await res.json();
         setCategories(data.categories ?? []);
+        setSelectedCategories([]);
       }
     } catch {
       setCategories([]);
@@ -83,7 +85,7 @@ export default function TestimoniesSearch() {
   const handleLanguageChange = useCallback((value: string) => {
     const newLangId = value === "Chinese" ? 2 : 1;
     setLangId(newLangId);
-    setSelectedCategory(null);
+    setSelectedCategories([]);
     setQuery("");
     setQueryTermsEnriched([]);
     setSuggestionsEnriched([]);
@@ -227,7 +229,7 @@ export default function TestimoniesSearch() {
         terms: termsToSend.join(","),
         lang_id: String(langId),
       });
-      if (selectedCategory) params.set("category", selectedCategory);
+      if (selectedCategories.length > 0) params.set("categories", selectedCategories.join("|"));
       const apiUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TESTIMONIES_SEARCH}?${params}`;
       const res = await fetch(apiUrl);
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -472,18 +474,14 @@ export default function TestimoniesSearch() {
               size="sm"
             />
           </Box>
-          <Select
-            label="Category"
-            placeholder="All categories"
-            data={categories}
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-            clearable
-            searchable
-            size="sm"
-            style={{ minWidth: 220 }}
-            styles={{ label: { fontSize: 'var(--mantine-font-size-xs)', color: 'var(--mantine-color-dimmed)' } }}
-          />
+          <Box>
+            <Text size="xs" c="dimmed" mb={4}>Category</Text>
+            <CategoryTreeSelect
+              data={categories}
+              selectedValues={selectedCategories}
+              onChange={setSelectedCategories}
+            />
+          </Box>
         </Group>
       </Paper>
 

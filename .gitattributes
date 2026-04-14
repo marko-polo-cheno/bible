@@ -1,1 +1,3 @@
 backend/testimonies.jsonl filter=lfs diff=lfs merge=lfs -text
+backend/testimonies_en.jsonl filter=lfs diff=lfs merge=lfs -text
+backend/testimonies_zh.jsonl filter=lfs diff=lfs merge=lfs -text
