@@ -12,69 +12,84 @@ from models import TestimoniesSearchQuery
 
 client = OpenAI()
 
-JSONL_PATH = Path(__file__).parent / "testimonies.jsonl"
+JSONL_PATH_EN = Path(__file__).parent / "testimonies_en.jsonl"
+JSONL_PATH_ZH = Path(__file__).parent / "testimonies_zh.jsonl"
 
 SUFFIXES = ["s", "es", "ed", "d", "ing", "er", "ers", "ly", "tion", "sion", "ment", "ness", "ful", "less", "ous", "ive", "al", "ity"]
 
-TESTIMONIES_URL = (
-    "https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies.jsonl"
+TESTIMONIES_URL_EN = (
+    "https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies_en.jsonl"
+)
+TESTIMONIES_URL_ZH = (
+    "https://github.com/marko-polo-cheno/bible/raw/main/backend/testimonies_zh.jsonl"
 )
 
-_file_ready = False
+_file_ready_en = False
+_file_ready_zh = False
 _file_lock = threading.Lock()
 
 
-def _download_testimonies():
-    logger.info("Downloading testimonies.jsonl from GitHub...")
-    resp = http_requests.get(TESTIMONIES_URL, timeout=120, stream=True)
+def _download_file(url: str, path: Path):
+    logger.info(f"Downloading {path.name} from GitHub...")
+    resp = http_requests.get(url, timeout=120, stream=True)
     resp.raise_for_status()
     size = 0
-    with open(JSONL_PATH, "wb") as f:
+    with open(path, "wb") as f:
         for chunk in resp.iter_content(chunk_size=8192):
             f.write(chunk)
             size += len(chunk)
-    logger.info(f"Downloaded testimonies.jsonl ({size} bytes)")
+    logger.info(f"Downloaded {path.name} ({size} bytes)")
 
 
-def _is_lfs_pointer() -> bool:
+def _is_lfs_pointer(path: Path) -> bool:
     try:
-        with open(JSONL_PATH, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             first_line = f.readline()
         return "git-lfs.github.com" in first_line
     except FileNotFoundError:
         return True
 
 
-def ensure_testimonies_file() -> int:
-    global _file_ready
-    if _file_ready:
-        return -1
-
-    with _file_lock:
-        if _file_ready:
-            return -1
-
-        if _is_lfs_pointer():
-            logger.warning("testimonies.jsonl is missing or is a Git LFS pointer")
-            try:
-                _download_testimonies()
-            except Exception as e:
-                logger.error(f"Failed to download testimonies.jsonl: {e}")
-                return 0
-
-        count = 0
+def _ensure_file(path: Path, url: str) -> int:
+    if _is_lfs_pointer(path):
+        logger.warning(f"{path.name} is missing or is a Git LFS pointer")
         try:
-            with open(JSONL_PATH, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        count += 1
-            logger.info(f"testimonies.jsonl validated: {count} entries")
+            _download_file(url, path)
         except Exception as e:
-            logger.error(f"Failed to validate testimonies.jsonl: {e}")
+            logger.error(f"Failed to download {path.name}: {e}")
             return 0
 
-        _file_ready = True
-        return count
+    count = 0
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    count += 1
+        logger.info(f"{path.name} validated: {count} entries")
+    except Exception as e:
+        logger.error(f"Failed to validate {path.name}: {e}")
+        return 0
+    return count
+
+
+def ensure_testimonies_file() -> int:
+    global _file_ready_en, _file_ready_zh
+
+    with _file_lock:
+        total = 0
+        if not _file_ready_en:
+            count = _ensure_file(JSONL_PATH_EN, TESTIMONIES_URL_EN)
+            if count > 0:
+                _file_ready_en = True
+                total += count
+
+        if not _file_ready_zh:
+            count = _ensure_file(JSONL_PATH_ZH, TESTIMONIES_URL_ZH)
+            if count > 0:
+                _file_ready_zh = True
+                total += count
+
+        return total if total > 0 else -1
 
 
 def generate_derivatives(word: str) -> List[str]:
@@ -110,45 +125,14 @@ def generate_derivatives(word: str) -> List[str]:
     return sorted(derivatives)
 
 
-def _extract_lang_id(link: str) -> int | None:
-    try:
-        qs = parse_qs(urlparse(link).query)
-        vals = qs.get("LangID") or qs.get("langid") or qs.get("langID")
-        if vals:
-            return int(vals[0])
-    except (ValueError, IndexError):
-        pass
-    return None
-
-
-def get_categories(lang_id: int) -> List[str]:
-    ensure_testimonies_file()
-    cats: set[str] = set()
-    try:
-        with open(JSONL_PATH, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if _extract_lang_id(entry.get("link", "")) != lang_id:
-                    continue
-                for c in entry.get("category", []):
-                    if c:
-                        cats.add(c)
-    except Exception as e:
-        logger.error(f"Error reading categories: {e}")
-        return []
-    return sorted(cats)
+def _get_jsonl_path(lang_id: int) -> Path:
+    return JSONL_PATH_ZH if lang_id == 2 else JSONL_PATH_EN
 
 
 def search_testimonies_content(
     search_terms: List[str],
-    lang_id: int | None = None,
-    category: str | None = None,
+    lang_id: int = 1,
+    categories: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
     ensure_testimonies_file()
 
@@ -163,9 +147,10 @@ def search_testimonies_content(
     if not unique_terms:
         return []
 
+    jsonl_path = _get_jsonl_path(lang_id)
     results = []
     try:
-        with open(JSONL_PATH, "r", encoding="utf-8") as f:
+        with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -175,12 +160,14 @@ def search_testimonies_content(
                 except json.JSONDecodeError:
                     continue
 
-                if lang_id is not None:
-                    if _extract_lang_id(testimony.get("link", "")) != lang_id:
-                        continue
-
-                if category is not None:
-                    if category not in testimony.get("category", []):
+                # Category filtering: prefix-based matching
+                if categories:
+                    entry_cats = testimony.get("category", [])
+                    if not any(
+                        ec == sc or ec.startswith(sc + "/")
+                        for ec in entry_cats
+                        for sc in categories
+                    ):
                         continue
 
                 raw = testimony.get("content", "").lower()
@@ -247,7 +234,7 @@ def suggest_terms(user_text: str, lang: str = "en") -> List[Dict[str, Any]]:
     try:
         logger.info(f"Making AI suggestion call for: {user_text} (lang={lang})")
         response = client.beta.chat.completions.parse(
-            model="gpt-5.2-2025-12-11",
+            model="gpt-5.4-mini-2026-03-17",
             reasoning_effort="low",
             messages=[
                 {"role": "system", "content": system_prompt},

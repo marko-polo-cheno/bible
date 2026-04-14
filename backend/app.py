@@ -15,9 +15,9 @@ from testimony_search import (
     search_testimonies_content,
     suggest_terms,
     generate_derivatives,
-    get_categories,
     ensure_testimonies_file,
 )
+from categories import get_category_tree
 
 
 def _bg_prepare_testimonies():
@@ -177,10 +177,10 @@ async def testimonies_categories_endpoint(lang_id: int = 1):
     logger.info(f"TESTIMONIES CATEGORIES REQUEST [{timestamp}] lang_id={lang_id}")
 
     try:
-        categories = get_categories(lang_id)
+        tree = get_category_tree(lang_id)
         processing_time = time.time() - start_time
-        logger.info(f"TESTIMONIES CATEGORIES SUCCESS [{timestamp}] {len(categories)} categories in {processing_time:.2f}s")
-        return JSONResponse(content={"categories": categories}, status_code=200)
+        logger.info(f"TESTIMONIES CATEGORIES SUCCESS [{timestamp}] {len(tree)} top-level categories in {processing_time:.2f}s")
+        return JSONResponse(content={"categories": tree}, status_code=200)
     except Exception as e:
         processing_time = time.time() - start_time
         logger.error(f"TESTIMONIES CATEGORIES ERROR [{timestamp}] {str(e)}")
@@ -230,13 +230,13 @@ async def testimonies_suggest_endpoint(query: str = "", lang: str = "en"):
 async def testimonies_search_endpoint(
     terms: str = "",
     lang_id: int = 1,
-    category: str | None = None,
+    categories: str | None = None,
 ):
     start_time = time.time()
     timestamp = datetime.now().isoformat()
 
     logger.info(f"TESTIMONIES SEARCH REQUEST [{timestamp}]")
-    logger.info(f"   Terms: '{terms}', lang_id: {lang_id}, category: '{category}'")
+    logger.info(f"   Terms: '{terms}', lang_id: {lang_id}, categories: '{categories}'")
 
     try:
         if not terms:
@@ -246,10 +246,11 @@ async def testimonies_search_endpoint(
         if not search_terms:
             return JSONResponse(content={"error": "No valid search terms"}, status_code=400)
 
+        cat_list = [c.strip() for c in categories.split("|") if c.strip()] if categories else None
         results = search_testimonies_content(
             search_terms,
             lang_id=lang_id,
-            category=category if category else None,
+            categories=cat_list,
         )
 
         response = {
