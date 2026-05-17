@@ -12,33 +12,82 @@
 /Bible and Truth
 /Bible and Truth/Biblical Topics
 /Bible and Truth/Biblical Topics/Prayer and Fasting
+/Bible and Truth/Biblical Topics/Psalms and Hymns and Spiritual Songs
 /Bible and Truth/Biblical Topics/Miracles and Divine Healing
+/Bible and Truth/Biblical Topics/Angels
 /Bible and Truth/Biblical Topics/Satan, Demons and Spiritual Warfare
 /Bible and Truth/Biblical Topics/Tithes and Offerings
 /Bible and Truth/Biblical Topics/Sabbath Observance
-/Bible and Truth/Biblical Topics/Heaven, Hell and the Afterlife
+/Bible and Truth/Biblical Topics/Eternal Hope
 /Bible and Truth/Biblical Topics/Worship and Idolatry
 /Bible and Truth/Biblical Topics/The Law and the Gospel
 /Bible and Truth/Biblical Topics/Numbers and Symbols in Scripture
+/Bible and Truth/Scripture
+/Bible and Truth/Scripture/Canon
+/Bible and Truth/Scripture/Inspiration
+/Bible and Truth/Scripture/Interpretation and Hermeneutics
 /Bible and Truth/Character Studies
 /Bible and Truth/Character Studies/Old Testament
 /Bible and Truth/Character Studies/Old Testament/Primeval History
 /Bible and Truth/Character Studies/Old Testament/Patriarchs
-/Bible and Truth/Character Studies/Old Testament/Moses and Aaron
-/Bible and Truth/Character Studies/Old Testament/Joshua and the Judges
-/Bible and Truth/Character Studies/Old Testament/United Monarchy
-/Bible and Truth/Character Studies/Old Testament/Kings of Israel and Judah
-/Bible and Truth/Character Studies/Old Testament/Major Prophets
-/Bible and Truth/Character Studies/Old Testament/Minor Prophets
-/Bible and Truth/Character Studies/Old Testament/Post-Exilic
+/Bible and Truth/Character Studies/Old Testament/Patriarchs/Adam
+/Bible and Truth/Character Studies/Old Testament/Patriarchs/Noah
+/Bible and Truth/Character Studies/Old Testament/Patriarchs/Abraham
+/Bible and Truth/Character Studies/Old Testament/Patriarchs/Isaac
+/Bible and Truth/Character Studies/Old Testament/Patriarchs/Jacob
+/Bible and Truth/Character Studies/Old Testament/Patriarchs/Esau
+/Bible and Truth/Character Studies/Old Testament/Patriarchs/Job
+/Bible and Truth/Character Studies/Old Testament/Women
+/Bible and Truth/Character Studies/Old Testament/Women/Eve
+/Bible and Truth/Character Studies/Old Testament/Women/Sarah
+/Bible and Truth/Character Studies/Old Testament/Women/Rebeccah
+/Bible and Truth/Character Studies/Old Testament/Women/Ruth
+/Bible and Truth/Character Studies/Old Testament/Women/Hannah
+/Bible and Truth/Character Studies/Old Testament/Women/Esther
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Joseph
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Moses
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Aaron
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Joshua
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Deborah
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Samson
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Samuel
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/David
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Nathan
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Elijah
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Elisha
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Isaiah
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Daniel
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Jeremiah
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Ezekiel
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Nehemiah
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Jonah
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Hosea
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/Zechariah
+/Bible and Truth/Character Studies/Old Testament/Prophets, Servants, Messengers/John the Baptist
+/Bible and Truth/Character Studies/Old Testament/Kings
+/Bible and Truth/Character Studies/Old Testament/Kings/Saul
+/Bible and Truth/Character Studies/Old Testament/Kings/David
+/Bible and Truth/Character Studies/Old Testament/Kings/Solomon
+/Bible and Truth/Character Studies/Old Testament/Kings/Hezekiah
+/Bible and Truth/Character Studies/Old Testament/Kings/Ahab
+/Bible and Truth/Character Studies/Old Testament/Antagonists
 /Bible and Truth/Character Studies/New Testament
 /Bible and Truth/Character Studies/New Testament/Jesus Christ
-/Bible and Truth/Character Studies/New Testament/John the Baptist
-/Bible and Truth/Character Studies/New Testament/The Apostles
-/Bible and Truth/Character Studies/New Testament/Paul
-/Bible and Truth/Character Studies/New Testament/Co-workers of Paul
+/Bible and Truth/Character Studies/New Testament/Disciples
+/Bible and Truth/Character Studies/New Testament/Disciples/Peter
+/Bible and Truth/Character Studies/New Testament/Disciples/John
+/Bible and Truth/Character Studies/New Testament/Disciples/James
+/Bible and Truth/Character Studies/New Testament/Apostles
+/Bible and Truth/Character Studies/New Testament/Apostles/Paul
+/Bible and Truth/Character Studies/New Testament/Apostles/Barnabas
+/Bible and Truth/Character Studies/New Testament/Apostles/Timothy
 /Bible and Truth/Character Studies/New Testament/Women of the New Testament
 /Bible and Truth/Character Studies/New Testament/Antagonists
+/Bible and Truth/Geography
+/Bible and Truth/Geography/Nations, Kingdoms and Empires
+/Bible and Truth/Geography/Cities and Regions
+/Bible and Truth/Geography/Landforms, Seas and Regions
 /Bible and Truth/Textual Studies — Books of the Bible
 /Bible and Truth/Textual Studies — Books of the Bible/Pentateuch
 /Bible and Truth/Textual Studies — Books of the Bible/Historical Books
@@ -73,7 +122,37 @@
 /Bible and Truth/Teachings of Jesus/Encounters with Individuals
 /Bible and Truth/Teachings of Jesus/The Passion Narrative
 /Bible and Truth/Apologetics
+/Bible and Truth/Doctrinal Studies
+/Bible and Truth/Doctrinal Studies/God
+/Bible and Truth/Doctrinal Studies/God/Attributes and Character of God
+/Bible and Truth/Doctrinal Studies/God/Creation and the Physical World
+/Bible and Truth/Doctrinal Studies/God/Goodness, Justice and Theodicy
+/Bible and Truth/Doctrinal Studies/God/Revelation and Providence
+/Bible and Truth/Doctrinal Studies/Human Nature and Sin
+/Bible and Truth/Doctrinal Studies/Church
+/Bible and Truth/Doctrinal Studies/Salvation
+/Bible and Truth/Doctrinal Studies/Salvation/Covenants and Salvation History
+/Bible and Truth/Doctrinal Studies/Salvation/Justification, Redemption and Sanctification
+/Bible and Truth/Doctrinal Studies/Salvation/Election and Human Responsibility
 /Daily Living
+/Daily Living/Christian Virtues
+/Daily Living/Christian Virtues
+/Daily Living/Christian Virtues/Faithfulness
+/Daily Living/Christian Virtues/Holiness
+/Daily Living/Christian Virtues/Holiness/Purity
+/Daily Living/Christian Virtues/Holiness/Goodness
+/Daily Living/Christian Virtues/Holiness/Godliness
+/Daily Living/Christian Virtues/Knowledge
+/Daily Living/Christian Virtues/Knowledge/Wisdom and Discernment
+/Daily Living/Christian Virtues/Knowledge/Knowing God’s will
+/Daily Living/Christian Virtues/Obedience and Submission
+/Daily Living/Christian Virtues/Humility
+/Daily Living/Christian Virtues/Perseverance and Patience
+/Daily Living/Christian Virtues/Love
+/Daily Living/Christian Virtues/Mercy
+/Daily Living/Christian Virtues/Service
+/Daily Living/Christian Virtues/Sacrifice
+/Daily Living/Christian Virtues/Bearing Witness
 /Daily Living/Church Life
 /Daily Living/Children and youth in church
 /Daily Living/Family Life
@@ -85,6 +164,8 @@
 /Daily Living/Family Life/Loss and Grief in the Family
 /Daily Living/Family Life/In-Laws, Extended Family and Family Rejection
 /Daily Living/Personal Life
+/Daily Living/Personal Life/Devotionals
+/Daily Living/Personal Life/Speech
 /Daily Living/Personal Life/Identity in Christ
 /Daily Living/Personal Life/Spiritual Growth and Maturity
 /Daily Living/Personal Life/Overcoming Sin and Temptation
@@ -94,6 +175,7 @@
 /Daily Living/Personal Life/Forgiveness and Repentance
 /Daily Living/Personal Life/Habits, Addictions and Vices
 /Daily Living/Personal Life/Sexual Purity
+/Daily Living/Personal Life/Secular Music
 /Daily Living/Social Life
 /Daily Living/Social Life/In the Community
 /Daily Living/Social Life/In the Workplace
@@ -104,8 +186,9 @@
 /Ministry
 /Ministry/Evangelism and Outreach
 /Ministry/Missionary Work
+/Ministry/Pastoring
 /Ministry/Religious Education
-/Ministry/Stewardship of Gifts and Talents
+/Ministry/Stewardship
 /Ministry/Succession and Raising Up Workers
 /Personal Cultivation
 /Personal Cultivation/Spiritual Disciplines and Cultivation
@@ -132,13 +215,61 @@
 /Eschatology and Last Things/Signs of the End Times
 /Eschatology and Last Things/The Second Coming and Judgment Day
 /Eschatology and Last Things/Latter Rain and Restored Apostolic Church
+/Eschatology and Last Things/Heaven, Hell and the Afterlife
 /Testimonies
 /Testimonies/Baptism
 /Testimonies/Receiving the Holy Spirit
 /Testimonies/Healing and Health
 /Testimonies/God's Providence and Protection
 /Testimonies/Conviction and Conversion Stories
-/Testimonies/Discipleship and Ministry Calling
+/Testimonies/Discipleship and Ministry
 /Testimonies/Revelations, Visions and Dreams
 /Testimonies/Family and Relationship
 /Testimonies/Other
+/Publications
+/Publications/Book
+/Publications/Book/Basic Beliefs
+/Publications/Book/Gospel Series
+/Publications/Book/Doctrinal Series
+/Publications/Book/Discipleship Series
+/Publications/Book/Testimony Series
+/Publications/Book/Inquiry Series
+/Publications/Book/Outreach Series
+/Publications/Book/Religious Education
+/Publications/Book/Religious Education/Manuals
+/Publications/Book/Religious Education/Student Spiritual Convocation
+/Publications/Book/Religious Education/Student Workbooks
+/Publications/Book/Religious Education/Student Workbooks/Elementary 2 Workbooks
+/Publications/Book/Religious Education/Student Workbooks/Junior 1 Workbooks
+/Publications/Book/Religious Education/Student Workbooks/Junior 2 Workbooks
+/Publications/Book/Religious Education/Textbooks
+/Publications/Book/Religious Education/Textbooks/Preschool
+/Publications/Book/Religious Education/Textbooks/Kindergarten
+/Publications/Book/Religious Education/Textbooks/Elementary 1
+/Publications/Book/Religious Education/Textbooks/Elementary 2
+/Publications/Book/Religious Education/Textbooks/Junior 1
+/Publications/Book/Religious Education/Textbooks/Junior 2
+/Publications/Book/Religious Education/Textbooks/College Youth
+/Publications/Book/Religious Education/Textbooks/Advanced Classes
+/Publications/Book/Religious Education/Textbooks/Adult Fellowship
+/Publications/Book/Religious Education/Textbooks/Theological Seminary
+/Publications/Biblical References
+/Publications/Biblical References/Bible Curriculum
+/Publications/Biblical References/Bible Study Guides
+/Publications/Biblical References/Topical Studies
+/Publications/Creative Writing
+/Publications/Facts and History
+/Publications/Lecture Notes
+/Publications/Magazine
+/Publications/Magazine/Manna Magazine
+/Publications/Magazine/Heavenly Sunlight Magazine
+/Publications/Magazine/Living Water Magazine
+/Publications/Magazine/Showers of Blessing Magazine
+/Publications/Magazine/Holy Spirit News (聖靈報) Magazine
+/Publications/Magazine/Holy Spirit Monthly (聖靈月刊) Magazine
+/Publications/News and Reports
+/Publications/Q&A or FAQ
+/Publications/Visiting the Church
+/Publications/Web Articles
+/Publications/How To
+/Publications/International Assembly
