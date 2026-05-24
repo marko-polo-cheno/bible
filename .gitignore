@@ -104,3 +104,16 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Local vLLM / Hugging Face caches (dual-GPU sermon classifier tooling)
+_local_llm_classifier/hf_home/
+_local_llm_classifier/.venv/
+
+# RAG indexer (bge-m3 over testimonies)
+_rag/hf_home/
+_rag/.venv/
+_rag/index/
+
+
+_local_llm_classifier/
+_rag/
