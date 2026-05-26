@@ -1,0 +1,11 @@
+{
+  "lang": "en",
+  "input_path": "/home/kolena/Desktop/projects/bible/backend/testimonies_en.jsonl",
+  "artifact_path": "/home/kolena/Desktop/projects/bible/backend/classification/en.default.labels.jsonl",
+  "model": "",
+  "tag": "default",
+  "total": 4371,
+  "completed": 0,
+  "pending": 4371,
+  "updated_at": "2026-05-26T03:16:04.412488+00:00"
+}
