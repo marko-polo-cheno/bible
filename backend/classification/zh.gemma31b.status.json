@@ -1,0 +1,11 @@
+{
+  "lang": "zh",
+  "input_path": "/home/kolena/Desktop/projects/bible/backend/testimonies_zh.jsonl",
+  "artifact_path": "/home/kolena/Desktop/projects/bible/backend/classification/zh.gemma31b.labels.jsonl",
+  "model": "gemma-4-31b-it-awq",
+  "tag": "gemma31b",
+  "total": 20506,
+  "completed": 7449,
+  "pending": 13057,
+  "updated_at": "2026-06-01T02:21:53.085467+00:00"
+}
