@@ -5,7 +5,7 @@
   "model": "gemma-4-31b-it-awq",
   "tag": "gemma31b",
   "total": 4371,
-  "completed": 4131,
-  "pending": 240,
-  "updated_at": "2026-05-31T21:40:47.353242+00:00"
+  "completed": 4355,
+  "pending": 16,
+  "updated_at": "2026-06-02T01:40:05.494628+00:00"
 }
