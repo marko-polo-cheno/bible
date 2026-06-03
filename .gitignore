@@ -112,8 +112,7 @@ _local_llm_classifier/.venv/
 # RAG indexer (bge-m3 over testimonies)
 _rag/hf_home/
 _rag/.venv/
-_rag/index/
-
+_rag/index/embeddings.partial.f32
+_rag/index/embed_checkpoint.json
 
 _local_llm_classifier/
-_rag/

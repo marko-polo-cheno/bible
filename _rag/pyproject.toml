@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "testimony-rag"
+version = "0.1.0"
+description = "BGE-M3 semantic retrieval over bilingual testimony corpus"
+authors = []
+
+packages = [{ include = "rag" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+pydantic = "^2.11.0"
+tqdm = "^4.67.0"
+faiss-cpu = "^1.9.0"
+FlagEmbedding = "^1.3.4"
+torch = "^2.5.0"
+
+[tool.poetry.scripts]
+rag = "rag.__main__:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
