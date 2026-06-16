@@ -23,15 +23,13 @@ from elibrary import ItemKey, parse_item_key
 BACKEND_DIR = Path(__file__).resolve().parent
 MODEL_NAME = os.environ.get("RAG_MODEL", "BAAI/bge-m3")
 
-# Where the prebuilt artifacts live. Defaults to the sibling _rag/index for
-# local dev; set RAG_INDEX_DIR on the deployed service.
-INDEX_DIR = Path(os.environ.get("RAG_INDEX_DIR", str(BACKEND_DIR.parent / "_rag" / "index")))
 FAISS_FILE = "faiss.index"
 METADATA_FILE = "metadata.jsonl"
-
-# Optional download URLs for the artifacts (too large to ship in the image).
-FAISS_URL = os.environ.get("RAG_FAISS_URL", "")
-METADATA_URL = os.environ.get("RAG_METADATA_URL", "")
+BUNDLED_INDEX_DIR = BACKEND_DIR.parent / "_rag" / "index"
+CACHE_INDEX_DIR = BACKEND_DIR / "rag_index"
+_ARTIFACT_BASE = "https://github.com/marko-polo-cheno/bible/raw/main/_rag/index"
+FAISS_URL = os.environ.get("RAG_FAISS_URL", f"{_ARTIFACT_BASE}/{FAISS_FILE}")
+METADATA_URL = os.environ.get("RAG_METADATA_URL", f"{_ARTIFACT_BASE}/{METADATA_FILE}")
 
 _lock = threading.Lock()
 _state: Dict[str, object] = {}
@@ -44,6 +42,46 @@ def status() -> Dict[str, object]:
 
 def is_ready() -> bool:
     return bool(_status["ready"])
+
+
+def _is_lfs_pointer(path: Path) -> bool:
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return "git-lfs.github.com" in f.readline()
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def _artifact_usable(path: Path, *, kind: str) -> bool:
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    if kind == "faiss":
+        if _is_lfs_pointer(path):
+            return False
+        with path.open("rb") as f:
+            return f.read(4) == b"IxFI"
+    if kind == "meta":
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                line = f.readline().strip()
+            if not line or "git-lfs.github.com" in line:
+                return False
+            json.loads(line)
+            return True
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return False
+    return False
+
+
+def _resolve_index_dir() -> Path:
+    explicit = os.environ.get("RAG_INDEX_DIR")
+    if explicit:
+        return Path(explicit)
+    faiss_b = BUNDLED_INDEX_DIR / FAISS_FILE
+    meta_b = BUNDLED_INDEX_DIR / METADATA_FILE
+    if _artifact_usable(faiss_b, kind="faiss") and _artifact_usable(meta_b, kind="meta"):
+        return BUNDLED_INDEX_DIR
+    return CACHE_INDEX_DIR
 
 
 def _download(url: str, path: Path) -> None:
@@ -60,16 +98,19 @@ def _download(url: str, path: Path) -> None:
 
 
 def _ensure_artifacts() -> Tuple[Path, Path]:
-    faiss_path = INDEX_DIR / FAISS_FILE
-    meta_path = INDEX_DIR / METADATA_FILE
-    if not faiss_path.exists() and FAISS_URL:
+    index_dir = _resolve_index_dir()
+    faiss_path = index_dir / FAISS_FILE
+    meta_path = index_dir / METADATA_FILE
+    if not _artifact_usable(faiss_path, kind="faiss"):
+        if faiss_path.exists():
+            faiss_path.unlink()
         _download(FAISS_URL, faiss_path)
-    if not meta_path.exists() and METADATA_URL:
+    if not _artifact_usable(meta_path, kind="meta"):
+        if meta_path.exists():
+            meta_path.unlink()
         _download(METADATA_URL, meta_path)
-    if not faiss_path.exists() or not meta_path.exists():
-        raise FileNotFoundError(
-            f"Missing RAG artifacts in {INDEX_DIR} (set RAG_FAISS_URL / RAG_METADATA_URL to fetch)"
-        )
+    if not _artifact_usable(faiss_path, kind="faiss") or not _artifact_usable(meta_path, kind="meta"):
+        raise FileNotFoundError(f"Missing RAG artifacts in {index_dir}")
     return faiss_path, meta_path
 
 

@@ -110,6 +110,7 @@ _local_llm_classifier/hf_home/
 _local_llm_classifier/.venv/
 
 # RAG indexer (bge-m3 over testimonies)
+backend/rag_index/
 _rag/hf_home/
 _rag/.venv/
 _rag/index/embeddings.partial.f32

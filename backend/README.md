@@ -72,14 +72,12 @@ Requirements:
 1. Run `poetry lock` after the `faiss-cpu` / `FlagEmbedding` / `torch` (CPU)
    additions to `pyproject.toml`.
 2. Service plan **≥ 4 GB RAM** (≈2.3 GB model + 0.3 GB FAISS + metadata).
-3. The index artifacts are too large to ship in the image — build them offline
-   (CPU, see `_rag/README.md`) and host them, then set at runtime:
-   - `RAG_FAISS_URL`, `RAG_METADATA_URL` — download URLs, or
-   - `RAG_INDEX_DIR` — a mounted directory containing `faiss.index` +
-     `metadata.jsonl`.
+3. Index artifacts (~400 MB) are fetched from GitHub on first boot when not
+   present locally (same repo as testimonies). Override with `RAG_FAISS_URL`,
+   `RAG_METADATA_URL`, or `RAG_INDEX_DIR` if needed.
 
-Without these, keyword + filter search work fully; semantic reports
-`warming up` and passes the pool through unchanged.
+If artifact fetch or model load fails, keyword + filter search still work;
+semantic reports `warming up` and passes the pool through unchanged.
 
 ### Development
 
