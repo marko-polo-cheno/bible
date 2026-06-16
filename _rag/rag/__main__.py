@@ -1,3 +1,5 @@
+import torch
+
 import argparse
 import json
 import logging

@@ -3,9 +3,8 @@ import { Tabs } from '@mantine/core';
 import { BibleNavigator } from './BibleNavigator/BibleNavigator';
 import { SimilarBibleVerses } from './SimilarBibleVerses/SimilarBibleVerses';
 import BibleSearch from './BibleSearch/BibleSearch';
-import TestimoniesSearch from './TestimoniesSearch/TestimoniesSearch';
+import ElibrarySearch from './ElibrarySearch/ElibrarySearch';
 import { BibleChatProvider } from './contexts/BibleChatContext';
-import { TestimoniesChatProvider } from './contexts/TestimoniesChatContext';
 import '@mantine/core/styles.layer.css';
 function App() {
   return (
@@ -16,7 +15,7 @@ function App() {
             <Tabs.Tab value="bibleNavigator">Bible Navigator</Tabs.Tab>
             <Tabs.Tab value="similarBibleVerses">Connected Verses</Tabs.Tab>
             <Tabs.Tab value="bibleSearch">Bible Search</Tabs.Tab>
-            <Tabs.Tab value="testimoniesSearch">Testimonies Search</Tabs.Tab>
+            <Tabs.Tab value="elibrarySearch">eLibrary Search</Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="bibleNavigator" pt="xs">
@@ -30,10 +29,8 @@ function App() {
               <BibleSearch />
             </BibleChatProvider>
           </Tabs.Panel>
-          <Tabs.Panel value="testimoniesSearch" pt="xs">
-            <TestimoniesChatProvider>
-              <TestimoniesSearch />
-            </TestimoniesChatProvider>
+          <Tabs.Panel value="elibrarySearch" pt="xs">
+            <ElibrarySearch />
           </Tabs.Panel>
         </Tabs>
       </div>

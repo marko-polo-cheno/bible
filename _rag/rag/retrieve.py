@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import torch
 from FlagEmbedding import BGEM3FlagModel
 
 from .index import MODEL_NAME, _normalize, load_index
@@ -31,8 +32,6 @@ def retrieve(
 ) -> RetrieveResult:
     try:
         index, chunks = load_index(index_dir)
-        import torch
-
         use_cuda = torch.cuda.is_available()
         if use_cuda:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)

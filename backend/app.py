@@ -1,12 +1,23 @@
 import os
+
+# Prevent segfault from duplicate OpenMP runtimes (FAISS + PyTorch/FlagEmbedding
+# both ship their own libomp; on macOS/Anaconda they collide at model-load time).
+# Must run before faiss/torch are imported anywhere downstream.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import time
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,14 +30,32 @@ from testimony_search import (
     ensure_testimonies_file,
 )
 from categories import get_category_tree
+import elibrary
+import rag_search
+from pipeline import run_pipeline
+
+BACKEND_DIR = Path(__file__).resolve().parent
+
+# Shared eLibrary join map, built once at startup.
+JMAP: Optional[elibrary.JoinMap] = None
 
 
 def _bg_prepare_testimonies():
+    global JMAP
     try:
         count = ensure_testimonies_file()
         logger.info(f"[BG] Testimonies file ready ({count} entries)")
     except Exception as e:
         logger.error(f"[BG] Failed to prepare testimonies: {e}")
+
+    try:
+        JMAP = elibrary.build_join_map(
+            BACKEND_DIR / "testimonies_en.jsonl",
+            BACKEND_DIR / "testimonies_zh.jsonl",
+        )
+        logger.info(f"[BG] eLibrary join map ready ({len(JMAP.items)} items)")
+    except Exception as e:
+        logger.error(f"[BG] Failed to build join map: {e}")
 
 
 @asynccontextmanager
@@ -34,9 +63,19 @@ async def lifespan(app: FastAPI):
     port = os.environ.get("PORT", "not set")
     logger.info(f"[STARTUP] PORT env var = {port}")
     threading.Thread(target=_bg_prepare_testimonies, daemon=True).start()
-    logger.info("[STARTUP] Application ready (testimonies downloading in background)")
+    # Load the FAISS index + BGE-M3 model in the background; semantic search
+    # turns on when ready while keyword/filter work immediately.
+    rag_search.load_in_background()
+    logger.info("[STARTUP] Application ready (corpus + semantic index loading in background)")
     yield
     logger.info("[SHUTDOWN] Application shutting down")
+
+
+class ElibrarySearchRequest(BaseModel):
+    stages: List[Dict[str, Any]]
+    langIds: Optional[List[int]] = None
+    page: int = 0
+    size: int = 20
 
 
 app = FastAPI(lifespan=lifespan)
@@ -304,6 +343,65 @@ async def testimonies_search_endpoint(
         processing_time = time.time() - start_time
         logger.error(f"TESTIMONIES SEARCH ERROR [{timestamp}]")
         logger.error(f"   Error: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/elibrary/trees")
+async def elibrary_trees_endpoint(lang_id: int = 1):
+    """Both category trees for the filter UI: legacy (publication-format) and
+    taxonomy (LLM topical)."""
+    try:
+        return JSONResponse(content={
+            "legacy": elibrary.get_tree("legacy", lang_id),
+            "taxonomy": elibrary.get_tree("taxonomy", lang_id),
+        }, status_code=200)
+    except Exception as e:
+        logger.error(f"ELIBRARY TREES ERROR: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/elibrary/status")
+async def elibrary_status_endpoint():
+    return JSONResponse(content={
+        "joinMapReady": JMAP is not None,
+        "itemCount": len(JMAP.items) if JMAP is not None else 0,
+        "semantic": rag_search.status(),
+    }, status_code=200)
+
+
+@app.post("/elibrary/search")
+async def elibrary_search_endpoint(req: ElibrarySearchRequest):
+    """Run a staged search pipeline. Each stage narrows the previous pool.
+
+    Example body:
+        {"stages": [
+            {"type": "filter", "tree": "taxonomy", "prefixes": ["/Bible and Truth"]},
+            {"type": "keyword", "terms": ["healing"], "includeDerivatives": true},
+            {"type": "semantic", "query": "I lost my faith", "topK": 20}
+        ], "page": 0, "size": 20}
+    """
+    start_time = time.time()
+    timestamp = datetime.now().isoformat()
+    logger.info(f"ELIBRARY SEARCH REQUEST [{timestamp}] stages={[s.get('type') for s in req.stages]}")
+
+    if JMAP is None:
+        return JSONResponse(content={"error": "Index still building, try again shortly"}, status_code=503)
+
+    try:
+        result = run_pipeline(
+            JMAP,
+            req.stages,
+            lang_ids=req.langIds,
+            page=req.page,
+            size=req.size,
+        )
+        result["semanticReady"] = rag_search.is_ready()
+        processing_time = time.time() - start_time
+        funnel = " -> ".join(f"{s['inCount']}→{s['outCount']}" for s in result["stages"])
+        logger.info(f"ELIBRARY SEARCH SUCCESS [{timestamp}] {processing_time:.2f}s funnel: {funnel}")
+        return JSONResponse(content=result, status_code=200)
+    except Exception as e:
+        logger.error(f"ELIBRARY SEARCH ERROR [{timestamp}] {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 

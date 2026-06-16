@@ -8,5 +8,8 @@ export const API_CONFIG = {
     TESTIMONIES_SUGGEST: '/testimonies-suggest',
     TESTIMONIES_CATEGORIES: '/testimonies-categories',
     TESTIMONIES_ANALYZE: '/testimonies-analyze',
+    ELIBRARY_SEARCH: '/elibrary/search',
+    ELIBRARY_TREES: '/elibrary/trees',
+    ELIBRARY_STATUS: '/elibrary/status',
   }
 } as const;

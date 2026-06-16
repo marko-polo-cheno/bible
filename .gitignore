@@ -115,4 +115,9 @@ _rag/.venv/
 _rag/index/embeddings.partial.f32
 _rag/index/embed_checkpoint.json
 
+# Speaker-isolation recorder
+_speaker_isolation/.venv/
+_speaker_isolation/sessions/
+_speaker_isolation/profiles/
+
 _local_llm_classifier/

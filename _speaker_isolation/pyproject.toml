@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "speaker-isolation"
+version = "0.1.0"
+description = "Adaptive speaker-isolation recorder (A-only from shared-mic ABAB translation)"
+authors = []
+packages = [{ include = "speaker_isolation" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+numpy = "^2.2.0"
+pydantic = "^2.11.0"
+sounddevice = "^0.5.0"
+soundfile = "^0.13.0"
+
+[tool.poetry.scripts]
+speaker-isolation = "speaker_isolation.__main__:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

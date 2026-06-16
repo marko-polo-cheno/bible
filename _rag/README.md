@@ -4,14 +4,18 @@ Cross-lingual semantic retrieval over `bible/backend/testimonies_{en,zh}.jsonl`,
 
 A Chinese query can surface relevant English testimonies and vice versa — both languages live in the same vector space.
 
-## GPU vs CPU
+## CPU-only
 
-| Phase | Hardware | When |
-|-------|----------|------|
-| **Index build** (`rag index`) | GPU (recommended) | One-time setup: chunk corpus + embed all chunks |
-| **Query / hosting** (`rag retrieve`, app) | **CPU only** | Production; no GPU required after the index exists |
+This project runs **CPU-only** end to end — both the one-time index build and
+query/hosting. No GPU is required or assumed.
 
-Use GPUs only while building embeddings. The running app loads the pre-built FAISS index and encodes each user query on CPU — fast enough at this corpus size (~130k vectors, sub-10ms FAISS search).
+| Phase | When |
+|-------|------|
+| **Index build** (`rag index`) | One-time setup: chunk corpus + embed all chunks. CPU; slow but fine as a one-off (~75k chunks). |
+| **Query / hosting** (`rag retrieve`, app) | Production. Loads the pre-built FAISS index and encodes each user query on CPU — sub-10ms FAISS search at this corpus size. |
+
+The embedding code falls back to CPU automatically when CUDA is absent, so the
+`--gpus` flag below is a no-op on a CPU host.
 
 ## Install
 
@@ -20,29 +24,24 @@ cd bible/_rag
 poetry install
 ```
 
-For index builds on NVIDIA GPUs, install a CUDA torch wheel in the Poetry env (not needed on CPU-only hosts):
+Install the CPU torch wheel in the Poetry env:
 
 ```bash
-poetry run pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu124
+poetry run pip install --upgrade torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
 Model weights (~2.3 GB) are cached under `_rag/hf_home/` (gitignored). Set `HF_HOME` to override.
 
-## Build the index (GPU)
+## Build the index (CPU)
 
-Reads both JSONL corpora, chunks per language, embeds with BGE-M3, writes FAISS + metadata.
+Reads both JSONL corpora, chunks per language, embeds with BGE-M3, writes FAISS + metadata. This is a one-time, CPU-bound job — expect it to take a while over the full corpus, but it only runs when the corpus or chunking changes.
 
 ```bash
 cd bible/_rag
 
-# Full corpus (~25k docs → ~130k chunks). Uses both GPUs by default:
-poetry run rag index --gpus 0,1 --batch-size 32
-
-# Single GPU:
-poetry run rag index --gpus 0 --batch-size 32
+# Full corpus (~25k docs → ~75k chunks):
+poetry run rag index --batch-size 32
 ```
-
-On a machine with two RTX 3090s, `--gpus 0,1` splits the embedding workload across both cards. Without CUDA, the same command falls back to CPU (much slower).
 
 Custom corpora or output dir:
 
@@ -113,4 +112,4 @@ When available, the server will listen on `0.0.0.0:8801` (`HOST` / `PORT` overri
 
 - **Retrieval-only (v1).** No generation step yet. Ranked chunks are returned; a separate LLM can consume them for grounded answers.
 - The FAISS index is exact (`IndexFlatIP`). At ~130k vectors, queries are sub-10ms on CPU. If the corpus grows past ~1M vectors, consider HNSW or IVFPQ.
-- **Two-phase ops:** run `rag index` on a GPU machine (e.g. dual 3090), copy `_rag/index/` + `hf_home/` if needed, serve queries on CPU-only app servers.
+- **Two-phase ops (both CPU):** run `rag index` once to produce `_rag/index/`, then host `faiss.index` + `metadata.jsonl` for the app to fetch at boot. Production serving is **in-process** in `backend/rag_search.py` (single Railway service), not this CLI — see `backend/README.md`.
