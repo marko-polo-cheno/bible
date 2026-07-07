@@ -88,6 +88,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://marko-polo-cheno.github.io",
+        "https://almondsandolives.ca",
+        "https://www.almondsandolives.ca",
+        "https://bible.almondsandolives.ca",
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:5174",
