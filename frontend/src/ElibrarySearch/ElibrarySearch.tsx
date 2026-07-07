@@ -203,7 +203,7 @@ export default function ElibrarySearch() {
   // ----- search bar (shared) -----
   const renderBar = (big: boolean) => (
     <Paper shadow={big ? 'md' : 'xs'} p={big ? 'lg' : 'md'} radius="lg" withBorder>
-      <Group gap="sm" align="center" wrap="nowrap">
+      <Group gap="sm" align="center">
         <SegmentedControl
           size={big ? 'sm' : 'xs'}
           value={mode}
@@ -215,7 +215,7 @@ export default function ElibrarySearch() {
         />
         <TextInput
           ref={big ? undefined : refineRef}
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 180 }}
           size={big ? 'md' : 'sm'}
           radius="xl"
           placeholder={mode === 'semantic'

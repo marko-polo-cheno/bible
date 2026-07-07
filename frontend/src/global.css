@@ -1,5 +1,38 @@
-mark {
-  background: var(--mantine-color-yellow-4);
+:root {
+  /* Olive family */
+  --ao-olive-deep: #424236;
+  --ao-olive: #646e57;
+  --ao-sage: #95a37f;
+  --ao-sage-light: #b4b792;
+
+  /* Almond family (seasons of the almond tree) */
+  --ao-almond-wood: #704820; /* winter bark */
+  --ao-almond-cream: #eed9c4; /* autumn hull */
+  --ao-blossom: #eec4c4; /* spring blossom */
+  --ao-bud: #e7eec4; /* summer green */
+
+  /* Derived surfaces */
+  --ao-paper: #faf7f0;
+  --ao-paper-warm: #f6efe3;
+  --ao-ink: #34352b;
+  --ao-ink-soft: #6b6b5c;
+  --ao-line: #e4e0d2;
+
+  --ao-serif: 'Lora', 'Songti SC', Georgia, serif;
+  --ao-sans: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Noto Sans SC', sans-serif;
+}
+
+html {
+  background: var(--ao-paper);
+}
+
+body {
+  margin: 0;
+  background: var(--ao-paper);
+  color: var(--ao-ink);
+  font-family: var(--ao-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
@@ -8,8 +41,64 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: 'Sora', sans-serif;
-  font-optical-sizing: auto;
+  font-family: var(--ao-sans);
   font-weight: 600;
-  font-style: normal;
+}
+
+mark {
+  background: var(--ao-bud);
+}
+
+::selection {
+  background: var(--ao-sage-light);
+  color: var(--ao-olive-deep);
+}
+
+/* Shared sticky app bar (Bible, eLibrary) */
+.ao-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--ao-paper) 85%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--ao-line);
+}
+
+.ao-appbar-logo {
+  display: grid;
+  place-items: center;
+  line-height: 0;
+  border-radius: 10px;
+  transition: transform 0.15s ease;
+}
+
+.ao-appbar-logo:hover {
+  transform: scale(1.06);
+}
+
+.ao-appbar-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ao-olive-deep);
+}
+
+.ao-appbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

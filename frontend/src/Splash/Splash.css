@@ -1,0 +1,91 @@
+.ao-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(160deg, var(--ao-paper) 0%, var(--ao-paper-warm) 100%);
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+
+.ao-splash-leave {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ao-splash-branch {
+  width: min(320px, 72vw);
+}
+
+.ao-draw {
+  stroke-dasharray: 500;
+  stroke-dashoffset: 500;
+  animation: ao-draw 1.4s ease-out forwards;
+}
+
+@keyframes ao-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.ao-pop {
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: ao-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes ao-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ao-splash-word {
+  font-family: var(--ao-sans);
+  font-size: clamp(22px, 4.5vw, 34px);
+  font-weight: 600;
+  color: var(--ao-olive-deep);
+  letter-spacing: 0.35em;
+  text-indent: 0.35em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: ao-word 1s ease 1.2s forwards;
+}
+
+.ao-splash-sub {
+  font-family: var(--ao-serif);
+  font-style: italic;
+  color: var(--ao-ink-soft);
+  font-size: 14px;
+  opacity: 0;
+  animation: ao-fade 1s ease 1.7s forwards;
+}
+
+@keyframes ao-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ao-word {
+  from {
+    opacity: 0;
+    letter-spacing: 0.6em;
+  }
+  to {
+    opacity: 1;
+    letter-spacing: 0.35em;
+  }
+}

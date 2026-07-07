@@ -1,13 +1,16 @@
 import { Link } from 'react-router-dom';
-import { Anchor } from '@mantine/core';
+import BranchLogo from '../components/BranchLogo';
 import ElibrarySearch from '../ElibrarySearch/ElibrarySearch';
 
 function ElibraryPage() {
   return (
     <div>
-      <Anchor component={Link} to="/" px="md" pt="xs" style={{ display: 'inline-block' }}>
-        ← Home
-      </Anchor>
+      <header className="ao-appbar">
+        <Link to="/" className="ao-appbar-logo" aria-label="Home">
+          <BranchLogo />
+        </Link>
+        <span className="ao-appbar-title">eLibrary</span>
+      </header>
       <ElibrarySearch />
     </div>
   );
