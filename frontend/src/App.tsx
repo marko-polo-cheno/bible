@@ -1,39 +1,20 @@
 import { MantineProvider } from '@mantine/core';
-import { Tabs } from '@mantine/core';
-import { BibleNavigator } from './BibleNavigator/BibleNavigator';
-import { SimilarBibleVerses } from './SimilarBibleVerses/SimilarBibleVerses';
-import BibleSearch from './BibleSearch/BibleSearch';
-import ElibrarySearch from './ElibrarySearch/ElibrarySearch';
-import { BibleChatProvider } from './contexts/BibleChatContext';
+import { HashRouter, Route, Routes } from 'react-router-dom';
+import HomePage from './HomePage/HomePage';
+import BiblePage from './BiblePage/BiblePage';
+import ElibraryPage from './ElibraryPage/ElibraryPage';
 import '@mantine/core/styles.layer.css';
+
 function App() {
   return (
     <MantineProvider withGlobalStyles withNormalizeCSS>
-      <div>
-        <Tabs defaultValue="bibleSearch">
-          <Tabs.List>
-            <Tabs.Tab value="bibleNavigator">Bible Navigator</Tabs.Tab>
-            <Tabs.Tab value="similarBibleVerses">Connected Verses</Tabs.Tab>
-            <Tabs.Tab value="bibleSearch">Bible Search</Tabs.Tab>
-            <Tabs.Tab value="elibrarySearch">eLibrary Search</Tabs.Tab>
-          </Tabs.List>
-
-          <Tabs.Panel value="bibleNavigator" pt="xs">
-            <BibleNavigator />
-          </Tabs.Panel>
-          <Tabs.Panel value="similarBibleVerses" pt="xs">
-            <SimilarBibleVerses />
-          </Tabs.Panel>
-          <Tabs.Panel value="bibleSearch" pt="xs">
-            <BibleChatProvider>
-              <BibleSearch />
-            </BibleChatProvider>
-          </Tabs.Panel>
-          <Tabs.Panel value="elibrarySearch" pt="xs">
-            <ElibrarySearch />
-          </Tabs.Panel>
-        </Tabs>
-      </div>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/bible" element={<BiblePage />} />
+          <Route path="/elibrary" element={<ElibraryPage />} />
+        </Routes>
+      </HashRouter>
     </MantineProvider>
   );
 }
