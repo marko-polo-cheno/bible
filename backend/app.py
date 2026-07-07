@@ -90,7 +90,6 @@ app.add_middleware(
         "https://marko-polo-cheno.github.io",
         "https://almondsandolives.ca",
         "https://www.almondsandolives.ca",
-        "https://app.almondsandolives.ca",
         "http://localhost:3000",
         "http://localhost:5199",
         "http://localhost:5173",
