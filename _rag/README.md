@@ -2,7 +2,9 @@
 
 Cross-lingual semantic retrieval over `bible/backend/testimonies_{en,zh}.jsonl`, using **BAAI/bge-m3** for a shared multilingual embedding space and FAISS for top-k search.
 
-A Chinese query can surface relevant English testimonies and vice versa — both languages live in the same vector space.
+A Chinese query can surface relevant English testimonies and vice versa — both languages live in the same vector space. Language isolation is a query-time concern (`--lang-id`), applied as a FAISS `IDSelector` pre-filter so a filtered query still returns a full `top_k`.
+
+> **Index status:** the committed `index/` currently holds **English only** (74,918 chunks, all `lang_id: 1`). The Chinese corpus has not been embedded yet; see *Build the index* below.
 
 ## CPU-only
 
@@ -39,9 +41,11 @@ Reads both JSONL corpora, chunks per language, embeds with BGE-M3, writes FAISS 
 ```bash
 cd bible/_rag
 
-# Full corpus (~25k docs → ~75k chunks):
+# Full corpus: 24,877 docs → ~271,620 chunks (en 74,918 + zh 196,702), ~1.11 GB
 poetry run rag index --batch-size 32
 ```
+
+Embedding is the expensive half and it is CPU-bound, so budget accordingly — Chinese is ~2.6× the English chunk count. The build checkpoints as it goes (see *Artifacts*), so an interrupted run resumes.
 
 Custom corpora or output dir:
 
@@ -55,16 +59,18 @@ poetry run rag index \
 
 Chunking is language-aware so chunks stay within BGE-M3’s 512-token encode limit:
 
-- **English:** word windows (default 300 words, 40-word overlap)
-- **Chinese:** character windows (default 200 chars, 27-char overlap)
+- **English:** word windows (default 300 words, 40-word overlap) — a median 1,606 characters per chunk
+- **Chinese:** character windows (default 400 chars, 64-char overlap)
+
+The two are sized to carry comparable *information*, not comparable character counts: roughly 1 English word ≈ 1.3–1.5 Chinese characters, so 300 words ≈ 400 zh chars. Both land under BGE-M3's 512-token encode limit (en ~390 tokens, zh ~280–400). Shrinking the zh window much further inflates the index without adding recall — 200 chars yields 462k chunks (1.89 GB), while holding only ~50% of an English chunk's content.
 
 Override via env before `rag index`:
 
 ```bash
 export RAG_EN_CHUNK_WORDS=300
 export RAG_EN_CHUNK_WORD_OVERLAP=40
-export RAG_ZH_CHUNK_CHARS=200
-export RAG_ZH_CHUNK_CHAR_OVERLAP=27
+export RAG_ZH_CHUNK_CHARS=400
+export RAG_ZH_CHUNK_CHAR_OVERLAP=64
 ```
 
 Other env: `RAG_MODEL`, `RAG_INDEX_DIR`, `HF_HOME`.
@@ -111,5 +117,5 @@ When available, the server will listen on `0.0.0.0:8801` (`HOST` / `PORT` overri
 ## Notes
 
 - **Retrieval-only (v1).** No generation step yet. Ranked chunks are returned; a separate LLM can consume them for grounded answers.
-- The FAISS index is exact (`IndexFlatIP`). At ~130k vectors, queries are sub-10ms on CPU. If the corpus grows past ~1M vectors, consider HNSW or IVFPQ.
+- The FAISS index is exact (`IndexFlatIP`). At ~272k vectors (both languages), queries stay in the low tens of ms on CPU. If the corpus grows past ~1M vectors, consider HNSW or IVFPQ.
 - **Two-phase ops (both CPU):** run `rag index` once to produce `_rag/index/`, then host `faiss.index` + `metadata.jsonl` for the app to fetch at boot. Production serving is **in-process** in `backend/rag_search.py` (single Railway service), not this CLI — see `backend/README.md`.

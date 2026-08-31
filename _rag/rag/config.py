@@ -23,8 +23,10 @@ CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "64"))
 
 EN_CHUNK_WORDS = int(os.environ.get("RAG_EN_CHUNK_WORDS", "300"))
 EN_CHUNK_WORD_OVERLAP = int(os.environ.get("RAG_EN_CHUNK_WORD_OVERLAP", "40"))
-ZH_CHUNK_CHARS = int(os.environ.get("RAG_ZH_CHUNK_CHARS", "200"))
-ZH_CHUNK_CHAR_OVERLAP = int(os.environ.get("RAG_ZH_CHUNK_CHAR_OVERLAP", "27"))
+# 400 zh chars carries ~the same information as the 300-word en chunk
+# (~1 en word = 1.3-1.5 zh chars) and still fits BGE-M3's 512-token window.
+ZH_CHUNK_CHARS = int(os.environ.get("RAG_ZH_CHUNK_CHARS", "400"))
+ZH_CHUNK_CHAR_OVERLAP = int(os.environ.get("RAG_ZH_CHUNK_CHAR_OVERLAP", "64"))
 ZH_LANG_ID = 2
 
 

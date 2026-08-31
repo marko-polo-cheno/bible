@@ -126,6 +126,7 @@ def _load() -> None:
     rows_key: List[Optional[ItemKey]] = []
     rows_text: List[str] = []
     item_to_rows: Dict[ItemKey, List[int]] = {}
+    lang_to_rows: Dict[int, List[int]] = {}
 
     logger.info(f"[RAG] Reading metadata {meta_path}")
     with meta_path.open("r", encoding="utf-8") as f:
@@ -146,11 +147,17 @@ def _load() -> None:
             rows_text.append(rec.get("text", ""))
             if key is not None:
                 item_to_rows.setdefault(key, []).append(row_idx)
+            lang_to_rows.setdefault(lang_id, []).append(row_idx)
 
     if index.ntotal != len(rows_key):
         logger.warning(
             f"[RAG] Index/metadata length mismatch: ntotal={index.ntotal} rows={len(rows_key)}"
         )
+
+    logger.info(
+        "[RAG] chunks per lang_id: "
+        + ", ".join(f"{lang}={len(rows)}" for lang, rows in sorted(lang_to_rows.items()))
+    )
 
     logger.info(f"[RAG] Loading embedding model {MODEL_NAME} (CPU)")
     from FlagEmbedding import BGEM3FlagModel
@@ -162,6 +169,7 @@ def _load() -> None:
         rows_key=rows_key,
         rows_text=rows_text,
         item_to_rows=item_to_rows,
+        lang_to_rows=lang_to_rows,
         model=model,
     )
 
@@ -226,14 +234,26 @@ def semantic_search(
     rows_key: List[Optional[ItemKey]] = _state["rows_key"]  # type: ignore[assignment]
     rows_text: List[str] = _state["rows_text"]  # type: ignore[assignment]
     item_to_rows: Dict[ItemKey, List[int]] = _state["item_to_rows"]  # type: ignore[assignment]
+    lang_to_rows: Dict[int, List[int]] = _state.get("lang_to_rows") or {}  # type: ignore[assignment]
 
     qvec = _embed_query(query)
 
-    params = None
+    lang_filter = set(lang_ids) if lang_ids else None
+
+    chunk_rows: Optional[List[int]] = None
     if candidate_keys is not None:
-        chunk_rows: List[int] = []
+        chunk_rows = []
         for key in candidate_keys:
+            if lang_filter and key[0] not in lang_filter:
+                continue
             chunk_rows.extend(item_to_rows.get(key, []))
+    elif lang_filter:
+        chunk_rows = []
+        for lang in lang_filter:
+            chunk_rows.extend(lang_to_rows.get(lang, []))
+
+    params = None
+    if chunk_rows is not None:
         if not chunk_rows:
             return []
         sel = faiss.IDSelectorBatch(np.asarray(chunk_rows, dtype=np.int64))
@@ -248,7 +268,6 @@ def semantic_search(
     else:
         scores, idxs = index.search(qvec, search_k)
 
-    lang_filter = set(lang_ids) if lang_ids else None
     best: Dict[ItemKey, Tuple[float, int]] = {}
     for score, row in zip(scores[0], idxs[0]):
         if row < 0:

@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 
+import faiss
 import numpy as np
 import torch
 from FlagEmbedding import BGEM3FlagModel
@@ -46,16 +47,28 @@ def retrieve(
             dense = np.array(dense, dtype=np.float32)
         qvec = _normalize(np.asarray(dense, dtype=np.float32))
 
-        search_k = min(len(chunks), max(top_k * 5, top_k))
-        scores, indices = index.search(qvec, search_k)
+        params = None
+        if lang_id is not None:
+            rows = [i for i, c in enumerate(chunks) if c.lang_id == lang_id]
+            if not rows:
+                logger.warning("No indexed chunks for lang_id=%s", lang_id)
+                return RetrieveResult(query=query, results=[])
+            params = faiss.SearchParameters()
+            params.sel = faiss.IDSelectorBatch(np.asarray(rows, dtype=np.int64))
+            search_k = min(len(rows), max(top_k * 5, top_k))
+        else:
+            search_k = min(len(chunks), max(top_k * 5, top_k))
+
+        if params is not None:
+            scores, indices = index.search(qvec, search_k, params=params)
+        else:
+            scores, indices = index.search(qvec, search_k)
 
         hits: list[RetrieveHit] = []
         for score, idx in zip(scores[0], indices[0]):
             if idx < 0:
                 continue
             chunk = chunks[int(idx)]
-            if lang_id is not None and chunk.lang_id != lang_id:
-                continue
             if not _category_matches(chunk.category, category_prefixes or []):
                 continue
             snippet = chunk.text[:500] + ("..." if len(chunk.text) > 500 else "")

@@ -25,6 +25,11 @@ METADATA_FILE = "metadata.jsonl"
 EMBEDDINGS_PARTIAL = "embeddings.partial.f32"
 CHECKPOINT_FILE = "embed_checkpoint.json"
 
+# Rows handed to a single model.encode() call. FlagEmbedding runs a throwaway
+# batch-size probe forward per call and only length-sorts within a call, so
+# feeding it one GPU batch at a time costs ~2.25x on MPS.
+ENCODE_SLAB_ROWS = int(os.environ.get("RAG_ENCODE_SLAB_ROWS", "1024"))
+
 
 class ShardProgress(BaseModel):
     gpu_id: int
@@ -38,6 +43,7 @@ class EmbedCheckpoint(BaseModel):
     batch_size: int
     model_name: str
     dim: int
+    precision: str = "fp32"
     shards: list[ShardProgress]
 
 
@@ -49,15 +55,22 @@ def _normalize(vectors: np.ndarray) -> np.ndarray:
 
 @contextlib.contextmanager
 def _quiet_flagembedding():
-    prev = os.environ.get("TQDM_DISABLE")
-    os.environ["TQDM_DISABLE"] = "1"
+    # FlagEmbedding passes disable= explicitly to its bars, which overrides TQDM_DISABLE.
+    import FlagEmbedding.inference.embedder.encoder_only.m3 as m3
+
+    def _forced_disable(fn):
+        def wrapper(*args, **kwargs):
+            kwargs["disable"] = True
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    orig_tqdm, orig_trange = m3.tqdm, m3.trange
+    m3.tqdm, m3.trange = _forced_disable(orig_tqdm), _forced_disable(orig_trange)
     try:
         yield
     finally:
-        if prev is None:
-            os.environ.pop("TQDM_DISABLE", None)
-        else:
-            os.environ["TQDM_DISABLE"] = prev
+        m3.tqdm, m3.trange = orig_tqdm, orig_trange
 
 
 def _encode_batch(model: BGEM3FlagModel, batch: list[str], batch_size: int) -> np.ndarray:
@@ -143,6 +156,7 @@ def _init_checkpoint(
     gpu_ids: list[int],
     use_cuda: bool,
     fresh: bool,
+    precision: str,
 ) -> tuple[EmbedCheckpoint, np.memmap]:
     checkpoint_path = index_dir / CHECKPOINT_FILE
     embeddings_path = index_dir / EMBEDDINGS_PARTIAL
@@ -162,9 +176,11 @@ def _init_checkpoint(
 
     existing = None if fresh else _load_checkpoint(checkpoint_path)
     if existing is not None:
+        # batch_size and precision are deliberately not restart triggers: rows are
+        # embedded independently, and fp16 vs fp32 rows agree to cosine ~0.99995
+        # after normalization. Pass --fresh for a bit-uniform index.
         if (
             existing.total != total
-            or existing.batch_size != batch_size
             or existing.model_name != MODEL_NAME
             or existing.dim != EMBED_DIM
             or len(existing.shards) != len(shards)
@@ -187,6 +203,17 @@ def _init_checkpoint(
                 if done:
                     logger.info("Resuming embedding at %d / %d rows", done, total)
                 checkpoint = existing
+                if checkpoint.precision != precision:
+                    logger.warning(
+                        "Resuming an %s partial with %s; keeping the %d existing rows",
+                        checkpoint.precision,
+                        precision,
+                        done,
+                    )
+                if checkpoint.batch_size != batch_size or checkpoint.precision != precision:
+                    checkpoint.batch_size = batch_size
+                    checkpoint.precision = precision
+                    _save_checkpoint(checkpoint_path, checkpoint)
                 mmap = _open_embeddings_memmap(embeddings_path, total, EMBED_DIM)
                 return checkpoint, mmap
 
@@ -195,6 +222,7 @@ def _init_checkpoint(
         batch_size=batch_size,
         model_name=MODEL_NAME,
         dim=EMBED_DIM,
+        precision=precision,
         shards=shards,
     )
     _save_checkpoint(checkpoint_path, checkpoint)
@@ -212,18 +240,20 @@ def _embed_shard(
     desc: str,
 ) -> None:
     local_done = shard.done
-    total_batches = (len(texts) - local_done + batch_size - 1) // batch_size
+    slab_rows = max(batch_size, ENCODE_SLAB_ROWS)
     position = shard.gpu_id if desc.startswith("embed gpu") else 0
-    with tqdm(total=total_batches, desc=desc, unit="batch", position=position) as bar:
+    with tqdm(
+        total=len(texts), initial=local_done, desc=desc, unit="row", position=position
+    ) as bar:
         while local_done < len(texts):
-            batch = texts[local_done : local_done + batch_size]
-            vecs = _encode_batch(model, batch, batch_size)
+            slab = texts[local_done : local_done + slab_rows]
+            vecs = _encode_batch(model, slab, batch_size)
             row = shard.row_start + local_done
-            mmap[row : row + len(batch)] = vecs
+            mmap[row : row + len(slab)] = vecs
             mmap.flush()
-            local_done += len(batch)
+            local_done += len(slab)
             _commit_shard_done(checkpoint_path, shard.gpu_id, local_done)
-            bar.update(1)
+            bar.update(len(slab))
 
 
 def _embed_worker(
@@ -262,7 +292,7 @@ def _embed_worker(
 def embed_texts_checkpointed(
     texts: list[str],
     index_dir: Path,
-    batch_size: int = 32,
+    batch_size: int = 16,
     gpu_ids: list[int] | None = None,
     fresh: bool = False,
 ) -> np.ndarray:
@@ -273,14 +303,18 @@ def embed_texts_checkpointed(
 
     gpu_ids = gpu_ids or [0, 1]
     use_cuda = torch.cuda.is_available()
+    use_mps = not use_cuda and torch.backends.mps.is_available()
     if not use_cuda:
-        logger.info("CUDA unavailable; embedding on CPU")
+        logger.info("CUDA unavailable; embedding on %s", "MPS" if use_mps else "CPU")
         gpu_ids = [0]
+
+    # fp16 halves compute on any GPU backend; CPU kernels are fp32-only.
+    precision = "fp16" if (use_cuda or use_mps) else "fp32"
 
     n = len(texts)
     checkpoint_path = index_dir / CHECKPOINT_FILE
     checkpoint, mmap = _init_checkpoint(
-        index_dir, n, batch_size, gpu_ids, use_cuda, fresh
+        index_dir, n, batch_size, gpu_ids, use_cuda, fresh, precision
     )
 
     incomplete = [s for s in checkpoint.shards if s.done < s.row_end - s.row_start]
@@ -331,11 +365,15 @@ def embed_texts_checkpointed(
         return np.asarray(mmap, dtype=np.float32)
 
     shard = incomplete[0]
-    device = f"cuda:{shard.gpu_id}" if use_cuda else "cpu"
     try:
+        # BGEM3FlagModel takes `devices`, not `device`; the latter is swallowed by
+        # **kwargs and the model silently lands on the auto-detected backend.
+        model_kwargs: dict = {"use_fp16": precision == "fp16"}
         if use_cuda:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(shard.gpu_id)
-        model = BGEM3FlagModel(MODEL_NAME, use_fp16=use_cuda, device=device)
+        else:
+            model_kwargs["devices"] = "mps" if use_mps else "cpu"
+        model = BGEM3FlagModel(MODEL_NAME, **model_kwargs)
         shard_texts = texts[shard.row_start : shard.row_end]
         _embed_shard(
             model,
@@ -365,7 +403,7 @@ def save_metadata(chunks: list[ChunkRecord], path: Path) -> None:
 def build_index(
     corpus_paths: list[Path],
     index_dir: Path | None = None,
-    batch_size: int = 32,
+    batch_size: int = 16,
     gpu_ids: list[int] | None = None,
     fresh: bool = False,
     max_docs: int | None = None,

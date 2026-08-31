@@ -66,7 +66,13 @@ def main() -> None:
         help="Paths to testimonies JSONL files",
     )
     idx.add_argument("--index-dir", default=None, help="Output index directory")
-    idx.add_argument("--batch-size", type=int, default=32)
+    idx.add_argument(
+        "--batch-size",
+        type=int,
+        default=16,
+        help="Rows per forward pass. On MPS, throughput peaks around 8-16 and "
+             "degrades above 24 as attention goes memory-bound.",
+    )
     idx.add_argument("--gpus", default="0,1", help="Comma-separated GPU ids for parallel embed")
     idx.add_argument(
         "--fresh",
