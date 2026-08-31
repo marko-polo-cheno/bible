@@ -71,8 +71,10 @@ Requirements:
 
 1. Run `poetry lock` after the `faiss-cpu` / `FlagEmbedding` / `torch` (CPU)
    additions to `pyproject.toml`.
-2. Service plan **≥ 8 GB RAM** (≈2.3 GB model + 1.3 GB FAISS + ~0.7 GB chunk
-   text and row maps held by `rag_search`, plus the join map and headroom).
+2. Service plan **≥ 6 GB RAM**. Measured steady state is 3.9 GB once the first
+   query has touched every model weight (2.7 GB after load — FAISS, chunk text
+   and row maps, plus mmap'd BGE-M3 — rising to 3.9 GB on the first forward
+   pass). The join map itself costs only ~0.03 GB since it holds no content.
 3. Index artifacts (~1.7 GB: 1.29 GB `faiss.index` + 431 MB `metadata.jsonl`)
    are fetched from GitHub on first boot when not present locally (same repo as
    testimonies). Override with `RAG_FAISS_URL`, `RAG_METADATA_URL`, or
