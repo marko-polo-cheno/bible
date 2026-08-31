@@ -1,0 +1,16 @@
+{
+  "lang": "zh",
+  "tag": "gemini37f",
+  "model": "gemini-3.7-flash",
+  "input_path": "/Users/markchen/Desktop/learning/bible/backend/testimonies_zh.jsonl",
+  "artifact_path": "/Users/markchen/Desktop/learning/bible/backend/classification/zh.gemini37f.labels.jsonl",
+  "total": 20506,
+  "completed": 20506,
+  "pending": 0,
+  "failed": 0,
+  "prompt_tokens": 51471931,
+  "cached_tokens": 38355060,
+  "output_tokens": 280870,
+  "cache_name": "cachedContents/06cb53ppxzvjqjg5w15i01e47ecday0dqnmqjpoj",
+  "updated_at": "2026-08-31T20:01:47.901471+00:00"
+}

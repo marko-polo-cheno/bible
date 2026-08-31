@@ -117,6 +117,10 @@ _rag/.venv/
 _rag/index/embeddings.partial.f32
 _rag/index/embed_checkpoint.json
 
+# Gemini classifier explicit-cache handles (expire server-side, machine-local)
+_gemini_classifier/.venv/
+backend/classification/.*.cache.json
+
 # Speaker-isolation recorder
 _speaker_isolation/.venv/
 _speaker_isolation/sessions/

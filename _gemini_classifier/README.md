@@ -21,6 +21,11 @@ Each record adds `line_no` (the resume key), `primary_label`, and per-item token
 counts. Unlike the ZH gemma artifact, **both** languages carry `item_id` and
 `link`, so the join map can key ZH items properly instead of matching titles.
 
+Completed run: **4,371 / 4,371 EN** and **20,506 / 20,506 ZH**, 0 outstanding
+failures. 17 ZH records resolved to no valid taxonomy path and carry empty
+`labels` with a `no_valid_labels` flag, so the join map attaches labels to
+24,855 of 24,872 items.
+
 To serve these labels, flip `TAXONOMY_TAG` in `backend/elibrary.py`:
 
 ```python

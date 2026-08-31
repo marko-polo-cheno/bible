@@ -28,7 +28,7 @@ CLASSIFICATION_DIR = BACKEND_DIR / "classification"
 TAXONOMY_PATHS_FILE = BACKEND_DIR / "sermon_taxonomy_full_paths.txt"
 
 # Which classification artifact (tag) to read labels from.
-TAXONOMY_TAG = "gemma31b"
+TAXONOMY_TAG = "gemini37f"
 
 ItemKey = Tuple[int, int]  # (lang_id, item_id)
 
@@ -203,9 +203,9 @@ def _load_taxonomy(
 ) -> int:
     """Attach taxonomy labels to items.
 
-    The EN labels file carries ``item_id``/``link`` (join by key). The ZH labels
-    file is leaner — only ``filename`` — so we fall back to a title match
-    against the corpus.
+    Records carrying ``item_id``/``link`` join by key. Older artifacts (the
+    ``gemma31b`` ZH file) have only ``filename``, so those fall back to a title
+    match against the corpus.
     """
     if not path.exists():
         logger.warning(f"Classification labels missing: {path}")

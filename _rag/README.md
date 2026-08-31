@@ -64,6 +64,8 @@ Chunking is language-aware so chunks stay within BGE-M3’s 512-token encode lim
 
 The two are sized to carry comparable *information*, not comparable character counts: roughly 1 English word ≈ 1.3–1.5 Chinese characters, so 300 words ≈ 400 zh chars. Both land under BGE-M3's 512-token encode limit (en ~390 tokens, zh ~280–400). Shrinking the zh window much further inflates the index without adding recall — 200 chars yields 462k chunks (1.89 GB), while holding only ~50% of an English chunk's content.
 
+At 400 zh chars the built index is **315,859 chunks / 1.29 GB** of vectors over 24,872 items.
+
 Override via env before `rag index`:
 
 ```bash
@@ -117,5 +119,5 @@ When available, the server will listen on `0.0.0.0:8801` (`HOST` / `PORT` overri
 ## Notes
 
 - **Retrieval-only (v1).** No generation step yet. Ranked chunks are returned; a separate LLM can consume them for grounded answers.
-- The FAISS index is exact (`IndexFlatIP`). At ~272k vectors (both languages), queries stay in the low tens of ms on CPU. If the corpus grows past ~1M vectors, consider HNSW or IVFPQ.
+- The FAISS index is exact (`IndexFlatIP`). At ~316k vectors (both languages), queries stay in the low tens of ms on CPU. If the corpus grows past ~1M vectors, consider HNSW or IVFPQ.
 - **Two-phase ops (both CPU):** run `rag index` once to produce `_rag/index/`, then host `faiss.index` + `metadata.jsonl` for the app to fetch at boot. Production serving is **in-process** in `backend/rag_search.py` (single Railway service), not this CLI — see `backend/README.md`.
