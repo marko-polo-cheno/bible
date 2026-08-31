@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -174,10 +175,8 @@ def valid_paths() -> frozenset[str]:
     return frozenset(paths)
 
 
-@lru_cache(maxsize=1)
-def _normalized_index() -> Dict[str, str]:
-    paths, _ = load_taxonomy()
-    return {_normalize(p): p for p in paths}
+_CJK_RE = re.compile(r"[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff]+")
+_FILLER_RE = re.compile(r"[\s_]+")
 
 
 def _normalize(path: str) -> str:
@@ -187,18 +186,115 @@ def _normalize(path: str) -> str:
     return out.strip("/").lower()
 
 
-def repair_label(label: str) -> str | None:
-    """Map a model-returned label onto a real taxonomy path, or None if hopeless."""
-    if not label:
+def _compact(path: str) -> str:
+    return _FILLER_RE.sub("", _normalize(path))
+
+
+def _skeleton(path: str) -> str:
+    return _CJK_RE.sub("", _compact(path))
+
+
+def _unique_index(pairs) -> Dict[str, str]:
+    """Index a key onto its path, dropping keys that more than one path claims."""
+    seen: Dict[str, str] = {}
+    ambiguous = set()
+    for key, path in pairs:
+        if not key:
+            continue
+        if key in seen and seen[key] != path:
+            ambiguous.add(key)
+        else:
+            seen[key] = path
+    for key in ambiguous:
+        seen.pop(key, None)
+    return seen
+
+
+@lru_cache(maxsize=1)
+def _normalized_index() -> Dict[str, str]:
+    paths, _ = load_taxonomy()
+    return {_normalize(p): p for p in paths}
+
+
+@lru_cache(maxsize=1)
+def _compact_pairs() -> Tuple[Tuple[str, str], ...]:
+    paths, _ = load_taxonomy()
+    return tuple((_compact(p), p) for p in paths)
+
+
+@lru_cache(maxsize=1)
+def _compact_index() -> Dict[str, str]:
+    return _unique_index(_compact_pairs())
+
+
+@lru_cache(maxsize=1)
+def _skeleton_index() -> Dict[str, str]:
+    paths, _ = load_taxonomy()
+    return _unique_index((_skeleton(p), p) for p in paths)
+
+
+@lru_cache(maxsize=1)
+def _leaf_index() -> Dict[str, str]:
+    paths, _ = load_taxonomy()
+    return _unique_index((_compact(p.rsplit("/", 1)[-1]), p) for p in paths)
+
+
+def _unique_prefix(compact: str) -> str | None:
+    if len(compact) < 12:
         return None
+    hits = {path for key, path in _compact_pairs() if key.startswith(compact)}
+    return hits.pop() if len(hits) == 1 else None
+
+
+def _resolve(label: str) -> str | None:
     if label in valid_paths():
         return label
-    candidate = _normalized_index().get(_normalize(label))
-    if candidate is not None:
-        return candidate
-    if not label.startswith("/"):
-        return _normalized_index().get(_normalize("/" + label))
+    hit = _normalized_index().get(_normalize(label))
+    if hit is not None:
+        return hit
+    compact = _compact(label)
+    hit = _compact_index().get(compact)
+    if hit is not None:
+        return hit
+    hit = _skeleton_index().get(_skeleton(label))
+    if hit is not None:
+        return hit
+    return _unique_prefix(compact)
+
+
+def _closest_parent(label: str) -> str | None:
+    segments = [s for s in label.strip().split("/") if s]
+    while len(segments) > 1:
+        segments.pop()
+        hit = _resolve("/" + "/".join(segments))
+        if hit is not None:
+            return hit
     return None
+
+
+def repair_label(label: str) -> str | None:
+    """Map a model-returned label onto a real taxonomy path, or None if hopeless.
+
+    Tiers, each only reached when the previous one misses: exact, punctuation
+    normalisation, whitespace/underscore insensitivity, CJK-typo tolerance
+    (match on the non-CJK skeleton), unique prefix (a truncated path such as a
+    dropped ``Magazine`` suffix), unique leaf name (a real node quoted under the
+    wrong parent), and finally the closest valid ancestor. Every fuzzy tier is
+    guarded by uniqueness, so an ambiguous guess is dropped rather than mapped.
+    """
+    if not label:
+        return None
+    hit = _resolve(label)
+    if hit is not None:
+        return hit
+    if not label.startswith("/"):
+        hit = _resolve("/" + label)
+        if hit is not None:
+            return hit
+    hit = _leaf_index().get(_compact(label.rsplit("/", 1)[-1]))
+    if hit is not None:
+        return hit
+    return _closest_parent(label)
 
 
 def prompt_sha256() -> str:
