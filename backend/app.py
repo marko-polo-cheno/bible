@@ -385,19 +385,17 @@ async def elibrary_trees_endpoint(lang_id: int = 1):
         return JSONResponse(content={
             "legacy": elibrary.get_tree("legacy", lang_id),
             "taxonomy": elibrary.get_tree("taxonomy", lang_id),
-            # Third tree: medium + the granular type under it. Pruned to what
-            # the corpus actually holds — the CMS vocabulary is much wider than
-            # the searchable set, and a dead branch is worse than no branch.
+            # Third axis, and a flat one: just the medium. The CMS nests an
+            # occasion under it and also records the rendition (PDF / mp3 /
+            # web page), but both mostly restate the medium, and the occasion
+            # vocabulary is identical under Audio and Video — three controls
+            # asking one question. Empty mediums are dropped and counts come
+            # along, because this corpus is lopsided enough that the count is
+            # the only honest caption.
             "fileTypes": (
-                catalog.load_file_types() if JMAP is None
-                else JMAP.prune_file_type_tree(catalog.load_file_types())
-            ),
-            # How you can consume the item. Orthogonal to medium — a Document
-            # can be both PDF and web page — so it is its own scope, not a
-            # branch. Renditions that merely restate a medium are pruned.
-            "formats": (
-                catalog.load_formats() if JMAP is None
-                else JMAP.prune_format_facets(catalog.load_formats())
+                [{**n, "children": []} for n in catalog.load_file_types()]
+                if JMAP is None
+                else JMAP.medium_facets(catalog.load_file_types())
             ),
         }, status_code=200)
     except Exception as e:

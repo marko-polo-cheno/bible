@@ -39,9 +39,10 @@ SOURCES = [
 
 # The top level is the *medium* — one bucket per kind of thing, so every audio
 # container is one Audio and every text format is one Document. Under it sits
-# the granular type the CMS already records, so "Audio, but only sermons" or
-# "Documents, but not lecture notes" are expressible. Emitted as a nested tree
-# to file_types.json and served verbatim to the UI, never restated elsewhere.
+# the granular type the CMS already records, kept on each item's path so it
+# stays queryable. The nested tree goes to file_types.json; the API serves only
+# its roots, since the occasion vocabulary is the same under Audio and Video and
+# offering it twice asks the reader to tick two boxes for one intent.
 OTHER = "Other"
 MEDIA_ORDER = ["Audio", "Video", "Document", OTHER]
 MEDIUM_LABELS = {"Audio": "Audio", "Video": "Video", "Document": "Document", OTHER: "Other"}

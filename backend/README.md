@@ -72,45 +72,47 @@ Modules: `elibrary.py` (join map + trees), `catalog.py` (file-type facet),
 Neither category tree says *what kind of thing* an item is, so a third,
 non-topical facet comes from the CMS catalog exports — the **medium**:
 
-| medium | items | granular types beneath it |
+| medium | items | what lands here |
 | --- | --- | --- |
-| `/Audio` | 485 | Sermon, Testimony, Lecture, Convocation, Evangelical Service, Prayer, Sacrament |
-| `/Video` | 2,523 | Sermon, Outreach, Lecture, Evangelical Service, Prayer, Convocation, Testimony, Sacrament, Other |
-| `/Document` | 10,969 | Articles, Book chapters, Lecture notes |
-| `/Other` | 10,576 | — |
+| `/Document` | 10,969 | articles, book chapters, lecture notes |
+| `/Other` | 10,576 | uncatalogued — a stale export, see below |
+| `/Video` | 2,523 | mostly sermons and outreach videos |
+| `/Audio` | 485 | audio-only recordings that also have a transcript |
 
 Every audio container (mp3, m4a, wav, …) is one **Audio**; every text format
-(htm, html, pdf, doc, …) is one **Document**. Beneath the medium sits the type
-the CMS already records — `ContentType` for media, `ItemSubType` for documents.
-It is a `{name, value, children}` tree with `/`-paths, so `fileTypes:
-["/Audio"]` takes every occasion under it and `["/Audio/Sermon"]` just the one,
-prefix-matched by the same `matches_prefixes` the category trees use. Mixed
-depths in one request are fine. `/elibrary/trees` prunes branches with no items.
+(htm, html, pdf, doc, …) is one **Document**. `fileTypes: ["/Audio"]` is
+prefix-matched by the same `matches_prefixes` the category trees use, so the
+granular paths stored on each item still resolve under their medium.
 
-**Format** — how you can consume the item — is a separate, orthogonal scope
-(`formats: ["pdf"]`), because a Document can be both a web page and a PDF and an
-mp3 exists under two mediums. `pdf`, `html`, `mp3` and `video` are extracted per
-item; multi-select is a union, and it intersects with the file-type tree, so
-`/Document` + `pdf` is documents that have a PDF. A streaming host is not a
-format and is not a facet — it rides along as `videoHost` (`youtube` 2,522,
-`vimeo` 1) for badging and deep links.
+**Only the medium is offered as a filter.** The CMS records two finer things —
+the occasion beneath the medium (`ContentType`) and the rendition (`pdf`,
+`html`, `mp3`) — and both were once their own control. Neither earned it:
 
-`/elibrary/trees` only offers a format that tells you something the medium does
-not — under 10 items, or inside one medium and covering ≥95% of it, and it is
-pruned. Today that serves **PDF** (2,768, a quarter of `/Document`) and **MP3
-audio** (2,659, spanning `/Audio` 485 + `/Video` 2,174, which also splits
-`/Video` into 2,174 downloadable and 349 stream-only). `html` is dropped as a
-restatement of `/Document` (10,966 of 10,969). `catalog/formats.json` is the
-vocabulary, not the served list — expect entries there that are pruned away.
+- The occasion vocabulary is *identical* under `/Audio` and `/Video`, because a
+  sermon is the same event whether it was recorded to audio or video. Nesting it
+  under the medium printed the same ten words twice and made "all sermons" a
+  two-box click. Topic is what the taxonomy tree is for.
+- The renditions restate the medium. `html` is `/Document` (10,966 of 10,969),
+  and `pdf` (2,768) is a slice of it. Only `mp3` (2,659) genuinely cut across —
+  it spans `/Audio` 485 plus the `/Video` items that also ship audio — and one
+  informative chip did not pay for a whole second axis sitting next to a control
+  that looked like it already asked the question.
+
+So `/elibrary/trees` serves `fileTypes` flat: four `{name, value, count}`
+entries, empty mediums dropped. The count rides along because this corpus is
+lopsided enough that `Audio` meaning 485 of 24,553 has to be visible before the
+click. The per-item `formats` list and `videoHost` (`youtube` 2,522, `vimeo` 1)
+are still carried on every result for badging and deep links, and `formats` is
+still accepted on a search request — there is just no control that sends one.
 
 Note `PdfURL` holds the literal string `"NULL"` when absent, so an emptiness
 test wrongly reports that every publication has a PDF; only ~14% do.
 
 Built offline by `_catalog/build_catalog.py` into `catalog/{en,zh}.catalog.jsonl`
 (8 MB) — the API never opens a 68 MB CSV and never sniffs an encoding at request
-time. `catalog/file_types.json` is the single source of truth for the facet list
-and is served verbatim to the UI; `/elibrary/trees` drops any facet with zero
-items rather than rendering a dead chip.
+time. `catalog/file_types.json` still holds the full nested vocabulary and is
+the single source of truth for medium names and order; `/elibrary/trees` flattens
+it to the roots and drops any with zero items rather than rendering a dead chip.
 
 **`Other` is a stale export, not a category.** All 10,576 are uncatalogued, and
 10,570 of them have an `ItemID` above 55064 — the highest the May 2025 exports

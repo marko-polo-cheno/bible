@@ -109,7 +109,7 @@ searchable at all.
 How you can actually consume the item. *Not* a branch of the file-type tree — a
 Document can be both a web page and a PDF, and an mp3 exists under two different
 mediums — so it is its own scope (`formats.json`, `formats` on the request),
-intersected with the rest.
+intersected with the rest. It is no longer offered in the UI; see below.
 
 Extracted per item: `pdf`, `html`, `mp3` (any audio container), `video` (any
 video container). Multi-select is a union — picking **PDF** means "available as
@@ -120,26 +120,25 @@ item can stream from it while shipping nothing downloadable. It lives on the
 item as `video_host` (`youtube` 2,522 · `vimeo` 1 in the corpus) for badging and
 deep links, and is never a filter facet.
 
-### Only some of them earn a chip
+### Neither of them earns a chip any more
 
-`JoinMap.prune_format_facets` drops a rendition that says nothing the medium
-already says. Against the corpus today:
+The API used to prune the rendition list down to the formats that said something
+the medium did not (`JoinMap.prune_format_facets`, now gone). Against the corpus
+that rule kept two:
 
-| format | items | verdict |
+| format | items | why it was kept, and why it still lost |
 | --- | --- | --- |
-| `pdf` | 2,768 | **kept** — 25% of `/Document`, a real split |
-| `mp3` | 2,659 | **kept** — spans `/Audio` (485) *and* `/Video` (2,174), so it cuts across the medium and splits `/Video` into 2,174 downloadable vs 349 stream-only |
-| `html` | 10,966 | dropped — restates `/Document` (10,966 of 10,969; the chip would remove 3 items) |
-| `video` | 0 | dropped — no items in the corpus |
+| `pdf` | 2,768 | 25% of `/Document` — a real split, but a split of one medium |
+| `mp3` | 2,659 | spans `/Audio` (485) *and* `/Video` (2,174), the only one that genuinely cut across |
+| `html` | 10,966 | already pruned — restates `/Document` (10,966 of 10,969) |
+| `video` | 0 | already pruned — no items in the corpus |
 
-The rule is data-driven, not a hand-picked list: a format is offered unless it
-has fewer than 10 items, or it sits inside one medium and covers ≥95% of it. The
-values stay on every item either way, so the UI can still badge or link them.
-
-`formats.json` is the *vocabulary*, not the served list — the converter only
-knows the CSVs, and whether a format earns a control depends on the corpus,
-which only the API can see. Expect entries in that file that `/elibrary/trees`
-does not return.
+Two chips, one of them informative, sitting beside a file-type control that
+looked like it was asking the same question — a reader seeing **Audio** and
+**MP3 audio** in the same row has no way to know they are different questions.
+The whole axis came out of the UI. The values stay on every item, `formats` is
+still a valid search-request scope, and the pruning rule is in git if the axis
+ever comes back with room to explain itself.
 
 > **Careful with `PdfURL`.** The CMS writes the literal string `"NULL"` for an
 > absent URL, so a non-empty test says every publication has a PDF. It does not —

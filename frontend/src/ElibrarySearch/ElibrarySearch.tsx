@@ -35,19 +35,18 @@ interface StageStat {
 /** Per-run overrides for state that has not been committed yet. */
 interface PipelineOpts {
   tree?: TreeKind; prefixes?: string[]; lang?: string;
-  fileTypes?: string[]; formats?: string[];
+  fileTypes?: string[];
 }
 
-/** Which renditions an item has (PDF / web page) — orthogonal to its medium. */
-interface FormatFacet { value: string; label: string; }
-
 /**
- * Catalog facet tree served by /elibrary/trees — medium at the top
- * (/Audio, /Document, ...) and the granular type beneath (/Audio/Sermon).
- * Same {name, value, children} shape as the category trees, so it renders with
- * the same component and matches with the same prefix logic on the server.
+ * One medium from /elibrary/trees — /Audio, /Video, /Document, /Other — with
+ * how many items it holds. Flat: the CMS also files an occasion under each
+ * medium (/Audio/Sermon, /Video/Sermon) and records the rendition separately,
+ * but a sermon is a sermon whichever way it was recorded, and "web page" only
+ * ever meant /Document. Topic is the taxonomy tree's job; this asks what kind
+ * of thing you are about to open, once.
  */
-type FileTypeNode = CategoryNode;
+interface MediumFacet { name: string; value: string; count: number; }
 
 interface Snippet { text: string; highlights: [number, number][]; }
 
@@ -106,20 +105,18 @@ export default function ElibrarySearch() {
   const [filterTree, setFilterTree] = useState<TreeKind>('taxonomy');
   const [filterPrefixes, setFilterPrefixes] = useState<string[]>([]);
 
-  // File type is a top-level scope like language, but two levels deep, so it
-  // gets the same tri-state tree the categories use — selecting /Audio takes
-  // every occasion under it, /Audio/Sermon takes just the one.
-  const [fileTypeTree, setFileTypeTree] = useState<FileTypeNode[]>([]);
+  // File type is a top-level scope like language. Chips rather than a menu: four
+  // values, and a toggle is already a committed edit with nothing to close.
+  const [mediums, setMediums] = useState<MediumFacet[]>([]);
   const [fileTypes, setFileTypes] = useState<string[]>([]);
-
-  // Format is a flat two-value facet, so chips rather than a menu — a toggle is
-  // already a committed edit, nothing to close.
-  const [formatFacets, setFormatFacets] = useState<FormatFacet[]>([]);
-  const [formats, setFormats] = useState<string[]>([]);
 
   const searched = data !== null || loading;
   const refineRef = useRef<HTMLInputElement>(null);
   const latestReq = useRef(0);
+  // Smart is the default once the index can answer, but only until the user
+  // states a preference — flipping the toggle out from under them would be worse
+  // than starting on the wrong one.
+  const modePinned = useRef(false);
 
   // Load trees + semantic status once.
   useEffect(() => {
@@ -128,13 +125,16 @@ export default function ElibrarySearch() {
       .then(d => {
         if (!d) return;
         setTrees({ legacy: d.legacy ?? [], taxonomy: d.taxonomy ?? [] });
-        setFileTypeTree(d.fileTypes ?? []);
-        setFormatFacets(d.formats ?? []);
+        setMediums(d.fileTypes ?? []);
       })
       .catch(() => {});
     fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.ELIBRARY_STATUS}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.semantic?.ready) setSemanticReady(true); })
+      .then(d => {
+        if (!d?.semantic?.ready) return;
+        setSemanticReady(true);
+        if (!modePinned.current) setMode('semantic');
+      })
       .catch(() => {});
   }, []);
 
@@ -178,8 +178,7 @@ export default function ElibrarySearch() {
         body: JSON.stringify({
           stages: nextStages,
           langIds: langIdsOf(opts?.lang ?? lang),
-          fileTypes: opts?.fileTypes ?? fileTypes,  // [] means every type
-          formats: opts?.formats ?? formats,        // [] means every rendition
+          fileTypes: opts?.fileTypes ?? fileTypes,  // [] means every medium
           page: 0,
           size: 25,
         }),
@@ -198,7 +197,7 @@ export default function ElibrarySearch() {
     } finally {
       if (reqId === latestReq.current) setLoading(false);
     }
-  }, [lang, fileTypes, formats, buildFullStages]);
+  }, [lang, fileTypes, buildFullStages]);
 
   /** Re-run the current search under a new top-level filter. */
   const runWithFilter = useCallback((prefixes: string[], tree?: TreeKind) => {
@@ -209,7 +208,7 @@ export default function ElibrarySearch() {
     runPipeline(stages, { tree: tree ?? filterTree, prefixes });
   }, [stages, runPipeline, filterTree, resetResults]);
 
-  /** Re-run under a new file-type scope, committed when the menu closes. */
+  /** Re-run under a new medium scope; a chip toggle commits immediately. */
   const runWithFileTypes = useCallback((next: string[]) => {
     if (stages.length === 0 && filterPrefixes.length === 0) return;
     runPipeline(stages, { fileTypes: next });
@@ -259,7 +258,6 @@ export default function ElibrarySearch() {
     setInput('');
     setFilterPrefixes([]);
     setFileTypes([]);
-    setFormats([]);
     resetResults();
   };
 
@@ -286,15 +284,6 @@ export default function ElibrarySearch() {
   }
 
   const treeData = filterTree === 'taxonomy' ? trees.taxonomy : trees.legacy;
-  /** "Video · Sermon" for a granular path, "Document" for a bare medium. */
-  const fileTypeLabel = (path: string) => {
-    for (const n of fileTypeTree) {
-      if (n.value === path) return n.name;
-      const child = n.children?.find(c => c.value === path);
-      if (child) return `${n.name} · ${child.name}`;
-    }
-    return path.replace(/^\//, '').replace('/', ' · ');
-  };
 
   // The response's own stage list says whether it was filtered; live
   // filterPrefixes can already describe the *next* search while this one renders.
@@ -308,7 +297,7 @@ export default function ElibrarySearch() {
         <SegmentedControl
           size={big ? 'sm' : 'xs'}
           value={mode}
-          onChange={(v) => setMode(v as Mode)}
+          onChange={(v) => { modePinned.current = true; setMode(v as Mode); }}
           data={[
             { label: 'Keyword', value: 'keyword' },
             { label: semanticReady ? 'Smart' : 'Smart (warming…)', value: 'semantic' },
@@ -375,35 +364,25 @@ export default function ElibrarySearch() {
         </Group>
       </Group>
 
-      {fileTypeTree.length > 0 && (
+      {mediums.length > 0 && (
         <Group gap="xs" mt="sm" align="center">
           <Text size="xs" c="dimmed">Type:</Text>
-          <CategoryTreeSelect
-            noun="type"
-            data={fileTypeTree}
-            selectedValues={fileTypes}
-            onChange={setFileTypes}
-            onCommit={runWithFileTypes}
-          />
-          {formatFacets.length > 0 && (
-            <>
-              <Text size="xs" c="dimmed" ml="sm">Available as:</Text>
-              <Chip.Group
-                multiple
-                value={formats}
-                onChange={(v) => {
-                  setFormats(v);
-                  if (stages.length > 0 || filterPrefixes.length > 0) runPipeline(stages, { formats: v });
-                }}
-              >
-                <Group gap={6}>
-                  {formatFacets.map(f => (
-                    <Chip key={f.value} value={f.value} size="xs" variant="outline">{f.label}</Chip>
-                  ))}
-                </Group>
-              </Chip.Group>
-            </>
-          )}
+          <Chip.Group
+            multiple
+            value={fileTypes}
+            onChange={(v) => { setFileTypes(v); runWithFileTypes(v); }}
+          >
+            <Group gap={6}>
+              {mediums.map(m => (
+                <Chip key={m.value} value={m.value} size="xs" variant="outline">
+                  {/* The count is the caption: this corpus is lopsided enough
+                      that "Audio" meaning 485 of 24,553 has to be visible
+                      before the click, not discovered after it. */}
+                  {m.name} <Text span c="dimmed" inherit>{m.count.toLocaleString()}</Text>
+                </Chip>
+              ))}
+            </Group>
+          </Chip.Group>
         </Group>
       )}
     </Paper>
@@ -483,8 +462,8 @@ export default function ElibrarySearch() {
                   </Anchor>
                   <Group gap={6} wrap="nowrap">
                     <Badge size="xs" variant="light" color="gray">{r.langId === 2 ? '中文' : 'EN'}</Badge>
-                    {r.filePath && r.fileType !== 'Other' && (
-                      <Badge size="xs" variant="light" color="teal">{fileTypeLabel(r.filePath)}</Badge>
+                    {r.fileType && r.fileType !== 'Other' && (
+                      <Badge size="xs" variant="light" color="teal">{r.fileType}</Badge>
                     )}
                     {r.hitCount > 0 && <Badge size="xs" variant="light" color="blue">{r.hitCount} hits</Badge>}
                     {r.score != null && r.hitCount === 0 && (

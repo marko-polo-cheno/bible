@@ -8,12 +8,13 @@ two taxonomies:
   Books / Magazines / ...), stored on each testimony's ``category`` field.
 - **taxonomy tree** — the LLM-generated topical tree from
   ``classification/*.labels.jsonl`` (``/Bible and Truth/...``), multi-label.
-- **file type** — the two-level catalog facet from ``catalog/*.catalog.jsonl``:
-  medium (``/Audio``, ``/Document``, …) and the granular type under it
-  (``/Audio/Sermon``, ``/Document/Articles``). Not topical: it says what kind of
-  thing the item is, and it prefix-matches exactly like the two trees. Items the
-  catalog marks ``TableOfContents`` are dropped here, so they never reach any
-  stage, any ranking, or the index scan.
+- **file type** — the catalog facet from ``catalog/*.catalog.jsonl``. Each item
+  carries a two-level path (``/Audio/Sermon``, ``/Document/Article``), but only
+  the *medium* is offered as a filter: the occasion beneath it is the same
+  vocabulary under Audio and Video, so a sermon would have to be picked twice.
+  Not topical — it says what kind of thing the item is — and it prefix-matches
+  exactly like the two trees. Items the catalog marks ``TableOfContents`` are
+  dropped here, so they never reach any stage, any ranking, or the index scan.
 
 The join map is metadata-only (no content), so it stays small enough to hold
 in the slim API process. Content is streamed on demand by the keyword stage.
@@ -206,51 +207,38 @@ class JoinMap:
             out |= self.by_format.get(f, set())
         return out
 
-    def medium_keys(self) -> Dict[str, set]:
-        """Key set per top-level medium, collapsing the granular paths under it."""
-        out: Dict[str, set] = {}
+    def medium_counts(self) -> Dict[str, int]:
+        """Item count per top-level medium, collapsing the granular paths under it.
+
+        ``/Audio/Sermon`` and ``/Audio/Lecture`` both count toward ``/Audio``:
+        the occasion under the medium is CMS bookkeeping, not something the
+        search UI asks about.
+        """
+        out: Dict[str, int] = {}
         for path, keys in self.by_file_type.items():
-            out.setdefault(path.split("/")[1] if "/" in path[1:] or path.count("/") == 1
-                           else path, set()).update(keys)
+            root = "/" + path.lstrip("/").split("/")[0]
+            out[root] = out.get(root, 0) + len(keys)
         return out
 
-    def prune_format_facets(self, facets: List[Dict[str, str]],
-                            min_items: int = 10,
-                            redundant_at: float = 0.95) -> List[Dict[str, str]]:
-        """Offer a format only when it says something the medium does not.
+    def medium_facets(self, tree: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """The file-type facet the UI offers: one flat entry per medium.
 
-        Two ways a rendition fails to earn a chip: too few items to be worth a
-        control, or it sits inside a single medium and covers essentially all of
-        it — "YouTube" that selects 2,522 of 2,523 videos is just ``/Video``
-        spelled differently, and a chip that removes one item is noise.
+        The CMS nests an *occasion* under the medium (``/Audio/Sermon``,
+        ``/Video/Sermon``), but a sermon is the same kind of thing however it
+        was recorded, so offering that vocabulary twice only asks the reader to
+        tick two boxes for one intent. Topic is what the taxonomy tree is for;
+        this axis answers "what am I opening" and nothing else.
+
+        Counts come along because they are the honest caption: on this corpus
+        the mediums are wildly lopsided, and a facet that silently selects 2%
+        of the library is worse than one that says so.
         """
-        mediums = self.medium_keys()
-        out: List[Dict[str, str]] = []
-        for facet in facets:
-            keys = self.by_format.get(facet["value"]) or set()
-            if len(keys) < min_items:
-                continue
-            if any(keys <= mk and len(keys) >= redundant_at * len(mk)
-                   for mk in mediums.values() if mk):
-                continue
-            out.append(facet)
-        return out
-
-    def has_file_types(self, prefix: str) -> bool:
-        return any(matches_prefixes([p], [prefix]) for p in self.by_file_type)
-
-    def prune_file_type_tree(self, tree: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Drop facet nodes with no items, so the UI never shows a dead branch.
-
-        The vocabulary comes from the CMS export, which covers far more items
-        than the corpus holds — most of its occasions have no searchable text.
-        """
-        out: List[Dict[str, Any]] = []
-        for node in tree:
-            kids = self.prune_file_type_tree(node.get("children") or [])
-            if kids or self.has_file_types(node["value"]):
-                out.append({**node, "children": kids})
-        return out
+        counts = self.medium_counts()
+        return [
+            {"name": node["name"], "value": node["value"], "count": counts[node["value"]]}
+            for node in tree
+            if counts.get(node["value"])
+        ]
 
     def get(self, key: ItemKey) -> Optional[Item]:
         return self.items.get(key)
