@@ -8,6 +8,12 @@ two taxonomies:
   Books / Magazines / ...), stored on each testimony's ``category`` field.
 - **taxonomy tree** — the LLM-generated topical tree from
   ``classification/*.labels.jsonl`` (``/Bible and Truth/...``), multi-label.
+- **file type** — the two-level catalog facet from ``catalog/*.catalog.jsonl``:
+  medium (``/Audio``, ``/Document``, …) and the granular type under it
+  (``/Audio/Sermon``, ``/Document/Articles``). Not topical: it says what kind of
+  thing the item is, and it prefix-matches exactly like the two trees. Items the
+  catalog marks ``TableOfContents`` are dropped here, so they never reach any
+  stage, any ranking, or the index scan.
 
 The join map is metadata-only (no content), so it stays small enough to hold
 in the slim API process. Content is streamed on demand by the keyword stage.
@@ -21,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 from loguru import logger
 
+import catalog as catalog_mod
 from categories import get_category_tree  # legacy tree
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -107,6 +114,12 @@ class Item:
         "legacy_categories",
         "taxonomy_labels",
         "form_type",
+        "file_type",
+        "file_path",
+        "formats",
+        "video_host",
+        "sub_type",
+        "content_type",
     )
 
     def __init__(self, item_id: int, lang_id: int, title: str, link: str):
@@ -117,6 +130,12 @@ class Item:
         self.legacy_categories: List[str] = []
         self.taxonomy_labels: List[str] = []
         self.form_type: str = ""
+        self.file_type: str = catalog_mod.UNKNOWN_TYPE
+        self.file_path: str = f"/{catalog_mod.UNKNOWN_TYPE}"
+        self.formats: List[str] = []
+        self.video_host: str = ""
+        self.sub_type: str = ""
+        self.content_type: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -127,6 +146,12 @@ class Item:
             "legacyCategories": self.legacy_categories,
             "taxonomyLabels": self.taxonomy_labels,
             "formType": self.form_type,
+            "fileType": self.file_type,
+            "filePath": self.file_path,
+            "formats": self.formats,
+            "videoHost": self.video_host,
+            "subType": self.sub_type,
+            "contentType": self.content_type,
         }
 
 
@@ -146,9 +171,86 @@ class JoinMap:
 
     def __init__(self) -> None:
         self.items: Dict[ItemKey, Item] = {}
+        self.by_file_type: Dict[str, set] = {}
+        self.by_format: Dict[str, set] = {}
 
     def values(self) -> List[Item]:
         return list(self.items.values())
+
+    def keys_for_file_types(self, prefixes: Optional[List[str]]) -> Optional[set]:
+        """Keys under any of ``prefixes``; None means "no restriction".
+
+        Prefix-matched like the category trees, so ``/Audio`` selects every
+        occasion under it while ``/Audio/Sermon`` selects just the one. The
+        index is keyed by full path and has ~25 entries, so this is a scan over
+        paths, not over items.
+        """
+        if not prefixes:
+            return None
+        out: set = set()
+        for path, keys in self.by_file_type.items():
+            if matches_prefixes([path], prefixes):
+                out |= keys
+        return out
+
+    def keys_for_formats(self, formats: Optional[List[str]]) -> Optional[set]:
+        """Keys having *any* of ``formats``; None means "no restriction".
+
+        Union, not intersection: picking PDF means "available as a PDF", which
+        includes the items that are also published as a web page.
+        """
+        if not formats:
+            return None
+        out: set = set()
+        for f in formats:
+            out |= self.by_format.get(f, set())
+        return out
+
+    def medium_keys(self) -> Dict[str, set]:
+        """Key set per top-level medium, collapsing the granular paths under it."""
+        out: Dict[str, set] = {}
+        for path, keys in self.by_file_type.items():
+            out.setdefault(path.split("/")[1] if "/" in path[1:] or path.count("/") == 1
+                           else path, set()).update(keys)
+        return out
+
+    def prune_format_facets(self, facets: List[Dict[str, str]],
+                            min_items: int = 10,
+                            redundant_at: float = 0.95) -> List[Dict[str, str]]:
+        """Offer a format only when it says something the medium does not.
+
+        Two ways a rendition fails to earn a chip: too few items to be worth a
+        control, or it sits inside a single medium and covers essentially all of
+        it — "YouTube" that selects 2,522 of 2,523 videos is just ``/Video``
+        spelled differently, and a chip that removes one item is noise.
+        """
+        mediums = self.medium_keys()
+        out: List[Dict[str, str]] = []
+        for facet in facets:
+            keys = self.by_format.get(facet["value"]) or set()
+            if len(keys) < min_items:
+                continue
+            if any(keys <= mk and len(keys) >= redundant_at * len(mk)
+                   for mk in mediums.values() if mk):
+                continue
+            out.append(facet)
+        return out
+
+    def has_file_types(self, prefix: str) -> bool:
+        return any(matches_prefixes([p], [prefix]) for p in self.by_file_type)
+
+    def prune_file_type_tree(self, tree: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Drop facet nodes with no items, so the UI never shows a dead branch.
+
+        The vocabulary comes from the CMS export, which covers far more items
+        than the corpus holds — most of its occasions have no searchable text.
+        """
+        out: List[Dict[str, Any]] = []
+        for node in tree:
+            kids = self.prune_file_type_tree(node.get("children") or [])
+            if kids or self.has_file_types(node["value"]):
+                out.append({**node, "children": kids})
+        return out
 
     def get(self, key: ItemKey) -> Optional[Item]:
         return self.items.get(key)
@@ -172,7 +274,7 @@ def _iter_jsonl(path: Path):
                 continue
 
 
-def _load_legacy(jmap: JoinMap, path: Path, lang_id: int) -> int:
+def _load_legacy(jmap: JoinMap, path: Path, lang_id: int, skip: set) -> int:
     if not path.exists():
         logger.warning(f"Testimonies file missing for join map: {path}")
         return 0
@@ -180,7 +282,7 @@ def _load_legacy(jmap: JoinMap, path: Path, lang_id: int) -> int:
     for rec in _iter_jsonl(path):
         link = rec.get("link", "")
         key = parse_item_key(link)
-        if key is None:
+        if key is None or key in skip:
             continue
         item = jmap.items.get(key)
         if item is None:
@@ -200,6 +302,7 @@ def _load_taxonomy(
     path: Path,
     lang_id: int,
     title_index: Dict[str, List[ItemKey]],
+    skip: set,
 ) -> int:
     """Attach taxonomy labels to items.
 
@@ -224,6 +327,8 @@ def _load_taxonomy(
 
         targets: List[Item] = []
         if item_id is not None:
+            if (lang_id, int(item_id)) in skip:
+                continue
             item = jmap.items.get((lang_id, int(item_id)))
             if item is None:
                 item = Item(item_id=int(item_id), lang_id=lang_id,
@@ -268,11 +373,19 @@ def build_join_map(
     en_path: Path,
     zh_path: Path,
 ) -> JoinMap:
-    """Build the join map from testimonies (legacy) + classification (taxonomy)."""
+    """Build the join map from testimonies + classification + catalog.
+
+    The catalog is read *first* so its TableOfContents keys can be skipped while
+    the corpus is being read — those items are never constructed, so they cost
+    nothing downstream and cannot be returned by any stage.
+    """
     jmap = JoinMap()
 
-    en = _load_legacy(jmap, en_path, lang_id=1)
-    zh = _load_legacy(jmap, zh_path, lang_id=2)
+    cat = catalog_mod.load_catalog()
+    skip = cat.toc_keys
+
+    en = _load_legacy(jmap, en_path, lang_id=1, skip=skip)
+    zh = _load_legacy(jmap, zh_path, lang_id=2, skip=skip)
     logger.info(f"[JOIN] Legacy loaded: en={en}, zh={zh}")
 
     # Title -> keys index for filename-based taxonomy joins (ZH labels).
@@ -281,11 +394,28 @@ def build_join_map(
         title_index.setdefault(item.title.strip(), []).append(key)
 
     ten = _load_taxonomy(jmap, CLASSIFICATION_DIR / f"en.{TAXONOMY_TAG}.labels.jsonl",
-                         lang_id=1, title_index=title_index)
+                         lang_id=1, title_index=title_index, skip=skip)
     tzh = _load_taxonomy(jmap, CLASSIFICATION_DIR / f"zh.{TAXONOMY_TAG}.labels.jsonl",
-                         lang_id=2, title_index=title_index)
+                         lang_id=2, title_index=title_index, skip=skip)
     logger.info(f"[JOIN] Taxonomy labels attached: en={ten}, zh={tzh}")
-    logger.info(f"[JOIN] Total items: {len(jmap.items)}")
+
+    # Annotate with the catalog facet and build the reverse index the top-level
+    # file-type filter uses. Catalog rows with no corpus item are ignored.
+    for key, item in jmap.items.items():
+        item.file_type = cat.file_type.get(key, catalog_mod.UNKNOWN_TYPE)
+        item.file_path = cat.file_path.get(key, f"/{catalog_mod.UNKNOWN_TYPE}")
+        item.formats = cat.formats.get(key, [])
+        item.video_host = cat.video_host.get(key, "")
+        item.sub_type = cat.sub_type.get(key, "")
+        item.content_type = cat.content_type.get(key, "")
+        jmap.by_file_type.setdefault(item.file_path, set()).add(key)
+        for f in item.formats:
+            jmap.by_format.setdefault(f, set()).add(key)
+    logger.info("[JOIN] File types: " + ", ".join(
+        f"{p}={len(keys)}" for p, keys in sorted(jmap.by_file_type.items())))
+    logger.info("[JOIN] Formats: " + ", ".join(
+        f"{f}={len(keys)}" for f, keys in sorted(jmap.by_format.items())))
+    logger.info(f"[JOIN] Total items: {len(jmap.items)} ({len(skip)} TOC excluded)")
 
     return jmap
 

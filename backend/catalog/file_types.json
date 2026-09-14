@@ -1,0 +1,140 @@
+[
+  {
+    "name": "Audio",
+    "value": "/Audio",
+    "children": [
+      {
+        "name": "Sermon",
+        "value": "/Audio/Sermon",
+        "children": []
+      },
+      {
+        "name": "Lecture",
+        "value": "/Audio/Lecture",
+        "children": []
+      },
+      {
+        "name": "Convocation",
+        "value": "/Audio/Convocation",
+        "children": []
+      },
+      {
+        "name": "Evangelical Service",
+        "value": "/Audio/Evangelical Service",
+        "children": []
+      },
+      {
+        "name": "Prayer",
+        "value": "/Audio/Prayer",
+        "children": []
+      },
+      {
+        "name": "Testimony",
+        "value": "/Audio/Testimony",
+        "children": []
+      },
+      {
+        "name": "Sacrament",
+        "value": "/Audio/Sacrament",
+        "children": []
+      },
+      {
+        "name": "Choir",
+        "value": "/Audio/Choir",
+        "children": []
+      },
+      {
+        "name": "Outreach Videos",
+        "value": "/Audio/Outreach Videos",
+        "children": []
+      },
+      {
+        "name": "Other",
+        "value": "/Audio/Other",
+        "children": []
+      }
+    ]
+  },
+  {
+    "name": "Video",
+    "value": "/Video",
+    "children": [
+      {
+        "name": "Sermon",
+        "value": "/Video/Sermon",
+        "children": []
+      },
+      {
+        "name": "Lecture",
+        "value": "/Video/Lecture",
+        "children": []
+      },
+      {
+        "name": "Outreach Videos",
+        "value": "/Video/Outreach Videos",
+        "children": []
+      },
+      {
+        "name": "Evangelical Service",
+        "value": "/Video/Evangelical Service",
+        "children": []
+      },
+      {
+        "name": "Convocation",
+        "value": "/Video/Convocation",
+        "children": []
+      },
+      {
+        "name": "Prayer",
+        "value": "/Video/Prayer",
+        "children": []
+      },
+      {
+        "name": "Testimony",
+        "value": "/Video/Testimony",
+        "children": []
+      },
+      {
+        "name": "Choir",
+        "value": "/Video/Choir",
+        "children": []
+      },
+      {
+        "name": "Sacrament",
+        "value": "/Video/Sacrament",
+        "children": []
+      },
+      {
+        "name": "Other",
+        "value": "/Video/Other",
+        "children": []
+      }
+    ]
+  },
+  {
+    "name": "Document",
+    "value": "/Document",
+    "children": [
+      {
+        "name": "Articles",
+        "value": "/Document/Article",
+        "children": []
+      },
+      {
+        "name": "Book chapters",
+        "value": "/Document/Chapter",
+        "children": []
+      },
+      {
+        "name": "Lecture notes",
+        "value": "/Document/LectureNote",
+        "children": []
+      }
+    ]
+  },
+  {
+    "name": "Other",
+    "value": "/Other",
+    "children": []
+  }
+]

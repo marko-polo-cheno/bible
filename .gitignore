@@ -116,6 +116,11 @@ _rag/hf_home/
 _rag/.venv/
 _rag/index/embeddings.partial.f32
 _rag/index/embed_checkpoint.json
+# Row-map sidecar the API builds beside metadata.jsonl (derived, machine-local)
+_rag/index/rowmap.npz
+
+# Byte-offset sidecars the API builds beside the corpora (derived, machine-local)
+backend/*.jsonl.offsets.npz
 
 # Gemini classifier explicit-cache handles (expire server-side, machine-local)
 _gemini_classifier/.venv/

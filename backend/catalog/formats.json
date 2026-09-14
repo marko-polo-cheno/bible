@@ -1,0 +1,18 @@
+[
+  {
+    "value": "pdf",
+    "label": "PDF"
+  },
+  {
+    "value": "html",
+    "label": "Web page"
+  },
+  {
+    "value": "mp3",
+    "label": "MP3 audio"
+  },
+  {
+    "value": "video",
+    "label": "Video file"
+  }
+]

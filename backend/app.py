@@ -30,6 +30,8 @@ from testimony_search import (
     ensure_testimonies_file,
 )
 from categories import get_category_tree
+import catalog
+import corpus_index
 import elibrary
 import rag_search
 from pipeline import run_pipeline
@@ -57,15 +59,22 @@ def _bg_prepare_testimonies():
     except Exception as e:
         logger.error(f"[BG] Failed to build join map: {e}")
 
+    # Offset indexes for the keyword stage's targeted reads.
+    corpus_index.prewarm({
+        1: BACKEND_DIR / "testimonies_en.jsonl",
+        2: BACKEND_DIR / "testimonies_zh.jsonl",
+    })
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     port = os.environ.get("PORT", "not set")
     logger.info(f"[STARTUP] PORT env var = {port}")
     threading.Thread(target=_bg_prepare_testimonies, daemon=True).start()
-    # Load the FAISS index + BGE-M3 model in the background; semantic search
-    # turns on when ready while keyword/filter work immediately.
-    rag_search.load_in_background()
+    # Pull the RAG artifacts onto disk, warm the FAISS index + BGE-M3 eagerly so
+    # a fresh deploy is already hot, and start the idle reaper that drops them
+    # again after a quiet period. See rag_search's module docstring.
+    rag_search.start()
     logger.info("[STARTUP] Application ready (corpus + semantic index loading in background)")
     yield
     logger.info("[SHUTDOWN] Application shutting down")
@@ -74,11 +83,27 @@ async def lifespan(app: FastAPI):
 class ElibrarySearchRequest(BaseModel):
     stages: List[Dict[str, Any]]
     langIds: Optional[List[int]] = None
+    fileTypes: Optional[List[str]] = None
+    formats: Optional[List[str]] = None
     page: int = 0
     size: int = 20
 
 
 app = FastAPI(lifespan=lifespan)
+
+# Hitting eLibrary means someone may be about to run a semantic query, so these
+# paths keep the stack warm and start loading it if the reaper had evicted it.
+# /elibrary/trees fires on page mount, well before the user has picked filters
+# or typed a query — that head start is what hides the reload. Everything else
+# is deliberately excluded: the health check, the Bible reader (never touches
+# RAG) and /elibrary/status (a monitor polling it must not pin 3.9 GB), since
+# anything that counted as activity would stop the reaper firing at all.
+RAG_ACTIVITY_PREFIX = "/elibrary"
+RAG_ACTIVITY_EXCLUDE = {"/elibrary/status"}
+
+
+def _touches_semantic(path: str) -> bool:
+    return path.startswith(RAG_ACTIVITY_PREFIX) and path not in RAG_ACTIVITY_EXCLUDE
 
 # Simple in-memory analytics (in production, use a database)
 request_count = 0
@@ -127,6 +152,9 @@ async def log_requests(request: Request, call_next):
     logger.info(f"   Referer: {referer}")
     logger.info(f"   User-Agent: {user_agent}")
     logger.info(f"   X-Forwarded-For: {x_forwarded_for}")
+
+    if _touches_semantic(request.url.path):
+        rag_search.note_activity()
 
     response = await call_next(request)
 
@@ -357,6 +385,20 @@ async def elibrary_trees_endpoint(lang_id: int = 1):
         return JSONResponse(content={
             "legacy": elibrary.get_tree("legacy", lang_id),
             "taxonomy": elibrary.get_tree("taxonomy", lang_id),
+            # Third tree: medium + the granular type under it. Pruned to what
+            # the corpus actually holds — the CMS vocabulary is much wider than
+            # the searchable set, and a dead branch is worse than no branch.
+            "fileTypes": (
+                catalog.load_file_types() if JMAP is None
+                else JMAP.prune_file_type_tree(catalog.load_file_types())
+            ),
+            # How you can consume the item. Orthogonal to medium — a Document
+            # can be both PDF and web page — so it is its own scope, not a
+            # branch. Renditions that merely restate a medium are pruned.
+            "formats": (
+                catalog.load_formats() if JMAP is None
+                else JMAP.prune_format_facets(catalog.load_formats())
+            ),
         }, status_code=200)
     except Exception as e:
         logger.error(f"ELIBRARY TREES ERROR: {e}")
@@ -385,7 +427,7 @@ async def elibrary_search_endpoint(req: ElibrarySearchRequest):
     """
     start_time = time.time()
     timestamp = datetime.now().isoformat()
-    logger.info(f"ELIBRARY SEARCH REQUEST [{timestamp}] stages={[s.get('type') for s in req.stages]}")
+    logger.info(f"ELIBRARY SEARCH REQUEST [{timestamp}] stages={[s.get('type') for s in req.stages]} fileTypes={req.fileTypes}")
 
     if JMAP is None:
         return JSONResponse(content={"error": "Index still building, try again shortly"}, status_code=503)
@@ -395,10 +437,17 @@ async def elibrary_search_endpoint(req: ElibrarySearchRequest):
             JMAP,
             req.stages,
             lang_ids=req.langIds,
+            file_types=req.fileTypes,
+            formats=req.formats,
             page=req.page,
             size=req.size,
         )
+        # "will answer" vs "answers instantly" — after an idle eviction the
+        # first is still true while the second is false. The UI only labels the
+        # mode from semanticReady; anything that cares about latency should read
+        # semanticResident (or /elibrary/status) rather than infer it.
         result["semanticReady"] = rag_search.is_ready()
+        result["semanticResident"] = rag_search.is_resident()
         processing_time = time.time() - start_time
         funnel = " -> ".join(f"{s['inCount']}→{s['outCount']}" for s in result["stages"])
         logger.info(f"ELIBRARY SEARCH SUCCESS [{timestamp}] {processing_time:.2f}s funnel: {funnel}")

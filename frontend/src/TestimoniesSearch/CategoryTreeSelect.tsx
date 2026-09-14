@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import {
   Popover, Button, Tree, Group, Checkbox, Text, Box, ScrollArea, ActionIcon,
   type TreeNodeData, type RenderTreeNodePayload,
@@ -15,6 +15,22 @@ interface CategoryTreeSelectProps {
   data: CategoryNode[];
   selectedValues: string[];
   onChange: (values: string[]) => void;
+  /**
+   * Fired when the popover closes *and* the selection changed while it was
+   * open — so browsing the tree and closing it again costs nothing, but an
+   * actual edit commits. Receives the committed values directly rather than
+   * leaving the caller to read possibly-unflushed state.
+   */
+  onCommit?: (values: string[]) => void;
+  /** Noun for the button label — this tree is used for categories and for file types. */
+  noun?: string;
+}
+
+/** Order-insensitive compare: handleToggle rebuilds the array from a Set. */
+function sameSelection(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every(v => set.has(v));
 }
 
 /** Convert backend CategoryNode[] to Mantine TreeNodeData[] */
@@ -104,9 +120,24 @@ function getCheckState(
   return 'unchecked';
 }
 
-export default function CategoryTreeSelect({ data, selectedValues, onChange }: CategoryTreeSelectProps) {
+export default function CategoryTreeSelect({ data, selectedValues, onChange, onCommit, noun = 'categor' }: CategoryTreeSelectProps) {
   const [opened, setOpened] = useState(false);
+  const openedWith = useRef<string[]>([]);
   const tree = useTree({ multiple: true });
+
+  // Every open/close path funnels through here — Popover's own onChange
+  // (outside click, Escape) *and* the target button. Toggling straight from
+  // the button used to bypass onChange entirely, so closing the menu that way
+  // silently skipped the commit.
+  const setOpen = useCallback((next: boolean) => {
+    if (next === opened) return;  // never commit the same close twice
+    setOpened(next);
+    if (next) {
+      openedWith.current = selectedValues;
+    } else if (!sameSelection(openedWith.current, selectedValues)) {
+      onCommit?.(selectedValues);
+    }
+  }, [opened, selectedValues, onCommit]);
 
   const treeData = useMemo(() => toTreeData(data), [data]);
   const allLeafValues = useMemo(() => getAllLeafValues(data), [data]);
@@ -180,20 +211,25 @@ export default function CategoryTreeSelect({ data, selectedValues, onChange }: C
   const selectedCount = selectedValues.length;
   const totalLeaves = allLeafValues.length;
 
-  let buttonLabel = 'All categories';
-  if (selectedCount > 0 && selectedCount < totalLeaves) {
-    buttonLabel = `${selectedCount} categor${selectedCount === 1 ? 'y' : 'ies'} selected`;
-  } else if (selectedCount === 0) {
-    buttonLabel = 'All categories';
-  }
+  const plural = noun === 'categor' ? 'categories' : `${noun}s`;
+  const one = noun === 'categor' ? 'category' : noun;
+  const buttonLabel = selectedCount > 0 && selectedCount < totalLeaves
+    ? `${selectedCount} ${selectedCount === 1 ? one : plural} selected`
+    : `All ${plural}`;
 
   return (
-    <Popover opened={opened} onChange={setOpened} position="bottom-start" width={360} shadow="md">
+    <Popover
+      opened={opened}
+      onChange={setOpen}
+      position="bottom-start"
+      width={360}
+      shadow="md"
+    >
       <Popover.Target>
         <Button
           variant="default"
           size="sm"
-          onClick={() => setOpened(o => !o)}
+          onClick={() => setOpen(!opened)}
           styles={{ label: { fontWeight: 400 } }}
         >
           {buttonLabel}
@@ -201,7 +237,7 @@ export default function CategoryTreeSelect({ data, selectedValues, onChange }: C
       </Popover.Target>
       <Popover.Dropdown p="xs">
         <Group justify="space-between" mb="xs">
-          <Text size="xs" c="dimmed">Filter by category</Text>
+          <Text size="xs" c="dimmed">Filter by {one}</Text>
           <Group gap={4}>
             <Button size="compact-xs" variant="subtle" onClick={handleSelectAll}>Select all</Button>
             <Button size="compact-xs" variant="subtle" color="gray" onClick={handleClearAll}>Clear</Button>

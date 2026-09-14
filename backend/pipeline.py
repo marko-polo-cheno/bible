@@ -9,19 +9,22 @@ produced by the previous stage and narrows it further:
 - ``keyword``  keep items whose content contains terms; score = hit count
 - ``semantic`` keep items whose chunks rank highest for the query; score = cosine
 
-The first stage starts from the whole corpus (optionally narrowed by language).
+The first stage starts from the whole corpus, optionally narrowed by the two
+*top-level* scope controls — language, file type and format — which are not stages:
+they scope the pool before any stage runs, so the funnel counts users see are
+already relative to what they asked for.
 Final ordering uses the most recent *scoring* stage. Each stage reports its
 in/out counts so the UI can show the tiered funnel.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from loguru import logger
 
-from elibrary import Item, ItemKey, JoinMap, matches_prefixes, parse_item_key
+import corpus_index
+from elibrary import Item, ItemKey, JoinMap, matches_prefixes
 from testimony_search import generate_derivatives, generate_kwic_preview
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -129,30 +132,23 @@ def _run_keyword(state: PipelineState, jmap: JoinMap, params: Dict[str, Any]) ->
     kept: Set[ItemKey] = set()
     for lid, item_ids in by_lang_pool.items():
         path = JSONL_BY_LANG.get(lid)
-        if not path or not path.exists():
+        if not path:
             continue
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                key = parse_item_key(rec.get("link", ""))
-                if key is None or key[1] not in item_ids or key[0] != lid:
-                    continue
-                full = rec.get("content", "")
-                raw = full.lower()
-                scan = (raw[:5000] + raw[-5000:]) if len(raw) > 10000 else raw
-                hits = sum(scan.count(t) for t in lowered)
-                if hits > 0:
-                    kept.add(key)
-                    state.hit_counts[key] = hits
-                    state.scores[key] = float(hits)
-                    if want_snippets:
-                        state.snippets[key] = generate_kwic_preview(full, lowered)
+        # Read only the lines belonging to the pool. Anything an earlier stage
+        # dropped — and every TableOfContents item, which never enters the join
+        # map at all — is not seeked, not read and not parsed.
+        for item_id, rec in corpus_index.iter_records(path, lid, item_ids):
+            key = (lid, item_id)
+            full = rec.get("content", "")
+            raw = full.lower()
+            scan = (raw[:5000] + raw[-5000:]) if len(raw) > 10000 else raw
+            hits = sum(scan.count(t) for t in lowered)
+            if hits > 0:
+                kept.add(key)
+                state.hit_counts[key] = hits
+                state.scores[key] = float(hits)
+                if want_snippets:
+                    state.snippets[key] = generate_kwic_preview(full, lowered)
 
     state.pool = kept
     state.order_kind = "keyword"
@@ -169,7 +165,12 @@ def _run_semantic(state: PipelineState, jmap: JoinMap, params: Dict[str, Any]) -
 
     import rag_search
 
-    if not rag_search.is_ready():
+    # The stack is evicted after a quiet period, so a cold query waits for the
+    # reload rather than degrading. In practice the warm was already kicked off
+    # when the page mounted (see app.note_activity), so this rarely blocks.
+    if not rag_search.is_resident():
+        logger.info("[PIPELINE] Semantic stage cold — waiting for the index to load")
+    if not rag_search.ensure_ready():
         logger.warning("[PIPELINE] Semantic stage requested but RAG index not ready")
         return StageStat("semantic", "semantic (warming up)", in_count, in_count,
                          scored=False, available=False)
@@ -205,11 +206,21 @@ def run_pipeline(
     jmap: JoinMap,
     stages: List[Dict[str, Any]],
     lang_ids: Optional[List[int]] = None,
+    file_types: Optional[List[str]] = None,
+    formats: Optional[List[str]] = None,
     page: int = 0,
     size: int = 20,
 ) -> Dict[str, Any]:
     """Execute ``stages`` in order and return ranked, paginated results."""
     pool = set(jmap.candidate_keys(lang_ids))
+    # File type scopes the pool like language does — a set intersection before
+    # any stage, never a stage of its own.
+    ft_keys = jmap.keys_for_file_types(file_types)
+    if ft_keys is not None:
+        pool &= ft_keys
+    fmt_keys = jmap.keys_for_formats(formats)
+    if fmt_keys is not None:
+        pool &= fmt_keys
     state = PipelineState(pool)
     stats: List[StageStat] = []
 

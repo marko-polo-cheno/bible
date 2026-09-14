@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, Fragment } from 'react';
 import {
   Text, Box, Button, Loader, TextInput, Paper, Group, Stack, Badge,
-  SegmentedControl, Switch, Pill, ActionIcon, Tooltip, Anchor,
+  SegmentedControl, Switch, Pill, ActionIcon, Tooltip, Anchor, Chip,
 } from '@mantine/core';
 import { API_CONFIG } from '../config/api';
 import { IconSearch, IconChevronRight, IconX } from '@tabler/icons-react';
@@ -32,6 +32,23 @@ interface StageStat {
   available: boolean;
 }
 
+/** Per-run overrides for state that has not been committed yet. */
+interface PipelineOpts {
+  tree?: TreeKind; prefixes?: string[]; lang?: string;
+  fileTypes?: string[]; formats?: string[];
+}
+
+/** Which renditions an item has (PDF / web page) — orthogonal to its medium. */
+interface FormatFacet { value: string; label: string; }
+
+/**
+ * Catalog facet tree served by /elibrary/trees — medium at the top
+ * (/Audio, /Document, ...) and the granular type beneath (/Audio/Sermon).
+ * Same {name, value, children} shape as the category trees, so it renders with
+ * the same component and matches with the same prefix logic on the server.
+ */
+type FileTypeNode = CategoryNode;
+
 interface Snippet { text: string; highlights: [number, number][]; }
 
 interface ItemResult {
@@ -42,6 +59,10 @@ interface ItemResult {
   legacyCategories: string[];
   taxonomyLabels: string[];
   formType: string;
+  fileType: string;
+  filePath: string;
+  formats: string[];
+  videoHost: string;
   score: number | null;
   hitCount: number;
   snippets: Snippet[];
@@ -85,14 +106,31 @@ export default function ElibrarySearch() {
   const [filterTree, setFilterTree] = useState<TreeKind>('taxonomy');
   const [filterPrefixes, setFilterPrefixes] = useState<string[]>([]);
 
+  // File type is a top-level scope like language, but two levels deep, so it
+  // gets the same tri-state tree the categories use — selecting /Audio takes
+  // every occasion under it, /Audio/Sermon takes just the one.
+  const [fileTypeTree, setFileTypeTree] = useState<FileTypeNode[]>([]);
+  const [fileTypes, setFileTypes] = useState<string[]>([]);
+
+  // Format is a flat two-value facet, so chips rather than a menu — a toggle is
+  // already a committed edit, nothing to close.
+  const [formatFacets, setFormatFacets] = useState<FormatFacet[]>([]);
+  const [formats, setFormats] = useState<string[]>([]);
+
   const searched = data !== null || loading;
   const refineRef = useRef<HTMLInputElement>(null);
+  const latestReq = useRef(0);
 
   // Load trees + semantic status once.
   useEffect(() => {
     fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.ELIBRARY_TREES}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setTrees({ legacy: d.legacy ?? [], taxonomy: d.taxonomy ?? [] }); })
+      .then(d => {
+        if (!d) return;
+        setTrees({ legacy: d.legacy ?? [], taxonomy: d.taxonomy ?? [] });
+        setFileTypeTree(d.fileTypes ?? []);
+        setFormatFacets(d.formats ?? []);
+      })
       .catch(() => {});
     fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.ELIBRARY_STATUS}`)
       .then(r => r.ok ? r.json() : null)
@@ -100,28 +138,82 @@ export default function ElibrarySearch() {
       .catch(() => {});
   }, []);
 
-  const runPipeline = useCallback(async (nextStages: Stage[]) => {
+  /** Back to the landing state, discarding anything in flight. */
+  const resetResults = useCallback(() => {
+    latestReq.current++;
+    setData(null);
+    setError(null);
+    setLoading(false);
+  }, []);
+
+  const buildFullStages = useCallback((
+    searchStages: Stage[],
+    opts?: PipelineOpts,
+  ): Stage[] => {
+    const prefixes = opts?.prefixes ?? filterPrefixes;
+    const tree = opts?.tree ?? filterTree;
+    const out: Stage[] = [];
+    if (prefixes.length > 0) {
+      out.push({ type: 'filter', tree, prefixes: [...prefixes] });
+    }
+    out.push(...searchStages);
+    return out;
+  }, [filterPrefixes, filterTree]);
+
+  const runPipeline = useCallback(async (
+    searchStages: Stage[],
+    opts?: PipelineOpts,
+  ) => {
+    const nextStages = buildFullStages(searchStages, opts);
+    if (nextStages.length === 0) return;
+    // Filter edits fire searches on their own now, so two can be in flight at
+    // once — a slow semantic run must not overwrite the fast one that followed it.
+    const reqId = ++latestReq.current;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.ELIBRARY_SEARCH}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stages: nextStages, langIds: langIdsOf(lang), page: 0, size: 25 }),
+        body: JSON.stringify({
+          stages: nextStages,
+          langIds: langIdsOf(opts?.lang ?? lang),
+          fileTypes: opts?.fileTypes ?? fileTypes,  // [] means every type
+          formats: opts?.formats ?? formats,        // [] means every rendition
+          page: 0,
+          size: 25,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Error ${res.status}`);
       }
       const json: SearchResponse = await res.json();
+      if (reqId !== latestReq.current) return;
       setData(json);
       setSemanticReady(json.semanticReady);
     } catch (e: any) {
+      if (reqId !== latestReq.current) return;
       setError(e.message || 'Search failed');
     } finally {
-      setLoading(false);
+      if (reqId === latestReq.current) setLoading(false);
     }
-  }, [lang]);
+  }, [lang, fileTypes, formats, buildFullStages]);
+
+  /** Re-run the current search under a new top-level filter. */
+  const runWithFilter = useCallback((prefixes: string[], tree?: TreeKind) => {
+    if (stages.length === 0 && prefixes.length === 0) {
+      resetResults();  // nothing left to search for
+      return;
+    }
+    runPipeline(stages, { tree: tree ?? filterTree, prefixes });
+  }, [stages, runPipeline, filterTree, resetResults]);
+
+  /** Re-run under a new file-type scope, committed when the menu closes. */
+  const runWithFileTypes = useCallback((next: string[]) => {
+    if (stages.length === 0 && filterPrefixes.length === 0) return;
+    runPipeline(stages, { fileTypes: next });
+  }, [stages, filterPrefixes, runPipeline]);
 
   const buildFirstStage = (): Stage | null => {
     const text = input.trim();
@@ -139,41 +231,36 @@ export default function ElibrarySearch() {
     runPipeline(next);
   };
 
-  const addRefinement = (stage: Stage) => {
-    const next = [...stages, stage];
-    setStages(next);
-    runPipeline(next);
-    setInput('');
-  };
-
   const refineWith = () => {
     const text = input.trim();
     if (!text) return;
-    if (mode === 'semantic') {
-      addRefinement({ type: 'semantic', query: text, topK: 50 });
-    } else {
-      addRefinement({ type: 'keyword', terms: text.split(/\s*,\s*/).filter(Boolean), includeDerivatives });
-    }
+    const stage: Stage = mode === 'semantic'
+      ? { type: 'semantic', query: text, topK: 50 }
+      : { type: 'keyword', terms: text.split(/\s*,\s*/).filter(Boolean), includeDerivatives };
+    const next = [...stages, stage];
+    setStages(next);
+    runPipeline(next);
   };
 
-  const applyFilter = () => {
-    if (filterPrefixes.length === 0) return;
-    addRefinement({ type: 'filter', tree: filterTree, prefixes: filterPrefixes });
+  const clearFilters = () => {
     setFilterPrefixes([]);
+    runWithFilter([]);
   };
 
   const removeStage = (idx: number) => {
     const next = stages.filter((_, i) => i !== idx);
     setStages(next);
-    if (next.length === 0) { setData(null); return; }
+    if (next.length === 0 && filterPrefixes.length === 0) { resetResults(); return; }
     runPipeline(next);
   };
 
   const resetAll = () => {
     setStages([]);
-    setData(null);
     setInput('');
     setFilterPrefixes([]);
+    setFileTypes([]);
+    setFormats([]);
+    resetResults();
   };
 
   function renderSnippet(s: Snippet, i: number) {
@@ -199,6 +286,20 @@ export default function ElibrarySearch() {
   }
 
   const treeData = filterTree === 'taxonomy' ? trees.taxonomy : trees.legacy;
+  /** "Video · Sermon" for a granular path, "Document" for a bare medium. */
+  const fileTypeLabel = (path: string) => {
+    for (const n of fileTypeTree) {
+      if (n.value === path) return n.name;
+      const child = n.children?.find(c => c.value === path);
+      if (child) return `${n.name} · ${child.name}`;
+    }
+    return path.replace(/^\//, '').replace('/', ' · ');
+  };
+
+  // The response's own stage list says whether it was filtered; live
+  // filterPrefixes can already describe the *next* search while this one renders.
+  const filterStat = data?.stages[0]?.type === 'filter' ? data.stages[0] : undefined;
+  const statOffset = filterStat ? 1 : 0;
 
   // ----- search bar (shared) -----
   const renderBar = (big: boolean) => (
@@ -210,7 +311,7 @@ export default function ElibrarySearch() {
           onChange={(v) => setMode(v as Mode)}
           data={[
             { label: 'Keyword', value: 'keyword' },
-            { label: semanticReady ? 'Smart (RAG)' : 'Smart (warming…)', value: 'semantic' },
+            { label: semanticReady ? 'Smart' : 'Smart (warming…)', value: 'semantic' },
           ]}
         />
         <TextInput
@@ -232,7 +333,18 @@ export default function ElibrarySearch() {
       </Group>
 
       <Group gap="lg" mt="sm" align="center">
-        <SegmentedControl size="xs" value={lang} onChange={setLang} data={LANG_OPTIONS} />
+        <SegmentedControl
+          size="xs"
+          value={lang}
+          onChange={(v) => {
+            setLang(v);
+            // Language scopes the pool the same way the category filter does,
+            // so it re-runs on change too — otherwise the only way to apply it
+            // is "Refine", which appends a duplicate stage.
+            if (stages.length > 0 || filterPrefixes.length > 0) runPipeline(stages, { lang: v });
+          }}
+          data={LANG_OPTIONS}
+        />
         {mode === 'keyword' && (
           <Switch
             size="xs"
@@ -245,15 +357,55 @@ export default function ElibrarySearch() {
           <SegmentedControl
             size="xs"
             value={filterTree}
-            onChange={(v) => { setFilterTree(v as TreeKind); setFilterPrefixes([]); }}
+            onChange={(v) => {
+              const tree = v as TreeKind;
+              setFilterTree(tree);
+              if (filterPrefixes.length === 0) return;  // nothing was filtering
+              setFilterPrefixes([]);
+              runWithFilter([], tree);
+            }}
             data={[{ label: 'Topical', value: 'taxonomy' }, { label: 'Legacy', value: 'legacy' }]}
           />
-          <CategoryTreeSelect data={treeData} selectedValues={filterPrefixes} onChange={setFilterPrefixes} />
-          <Button size="xs" variant="light" disabled={filterPrefixes.length === 0} onClick={applyFilter}>
-            {searched ? 'Add filter' : 'Filter'}
-          </Button>
+          <CategoryTreeSelect
+            data={treeData}
+            selectedValues={filterPrefixes}
+            onChange={setFilterPrefixes}
+            onCommit={runWithFilter}
+          />
         </Group>
       </Group>
+
+      {fileTypeTree.length > 0 && (
+        <Group gap="xs" mt="sm" align="center">
+          <Text size="xs" c="dimmed">Type:</Text>
+          <CategoryTreeSelect
+            noun="type"
+            data={fileTypeTree}
+            selectedValues={fileTypes}
+            onChange={setFileTypes}
+            onCommit={runWithFileTypes}
+          />
+          {formatFacets.length > 0 && (
+            <>
+              <Text size="xs" c="dimmed" ml="sm">Available as:</Text>
+              <Chip.Group
+                multiple
+                value={formats}
+                onChange={(v) => {
+                  setFormats(v);
+                  if (stages.length > 0 || filterPrefixes.length > 0) runPipeline(stages, { formats: v });
+                }}
+              >
+                <Group gap={6}>
+                  {formatFacets.map(f => (
+                    <Chip key={f.value} value={f.value} size="xs" variant="outline">{f.label}</Chip>
+                  ))}
+                </Group>
+              </Chip.Group>
+            </>
+          )}
+        </Group>
+      )}
     </Paper>
   );
 
@@ -274,8 +426,20 @@ export default function ElibrarySearch() {
           {/* Pipeline funnel chips */}
           <Group gap="xs" align="center">
             <Text size="xs" c="dimmed">Pipeline:</Text>
+            {filterPrefixes.length > 0 && (
+              <>
+                <Pill
+                  withRemoveButton
+                  onRemove={clearFilters}
+                  styles={{ root: { backgroundColor: '#f1f3f5', color: '#495057' } }}
+                >
+                  {stageChipLabel({ type: 'filter', tree: filterTree, prefixes: filterPrefixes }, filterStat)}
+                </Pill>
+                {stages.length > 0 && <IconChevronRight size={14} color="#bbb" />}
+              </>
+            )}
             {stages.map((s, i) => {
-              const stat = data?.stages[i];
+              const stat = data?.stages[statOffset + i];
               const unavailable = stat && !stat.available;
               return (
                 <Fragment key={i}>
@@ -319,6 +483,9 @@ export default function ElibrarySearch() {
                   </Anchor>
                   <Group gap={6} wrap="nowrap">
                     <Badge size="xs" variant="light" color="gray">{r.langId === 2 ? '中文' : 'EN'}</Badge>
+                    {r.filePath && r.fileType !== 'Other' && (
+                      <Badge size="xs" variant="light" color="teal">{fileTypeLabel(r.filePath)}</Badge>
+                    )}
                     {r.hitCount > 0 && <Badge size="xs" variant="light" color="blue">{r.hitCount} hits</Badge>}
                     {r.score != null && r.hitCount === 0 && (
                       <Tooltip label="semantic similarity"><Badge size="xs" variant="light" color="grape">{r.score.toFixed(2)}</Badge></Tooltip>
@@ -334,11 +501,11 @@ export default function ElibrarySearch() {
 
                 {(r.taxonomyLabels.length > 0 || r.legacyCategories.length > 0) && (
                   <Group gap={6} mt={8}>
-                    {r.taxonomyLabels.slice(0, 3).map(l => (
-                      <Badge key={l} size="xs" variant="dot" color="indigo" styles={{ label: { textTransform: 'none' } }}>{l.split('/').filter(Boolean).slice(-1)[0]}</Badge>
+                    {r.taxonomyLabels.map(l => (
+                      <Badge key={l} title={l} size="xs" variant="dot" color="indigo" styles={{ label: { textTransform: 'none' } }}>{l.split('/').filter(Boolean).slice(-1)[0]}</Badge>
                     ))}
-                    {r.legacyCategories.slice(0, 2).map(c => (
-                      <Badge key={c} size="xs" variant="light" color="gray" styles={{ label: { textTransform: 'none' } }}>{c.split('/').slice(-1)[0]}</Badge>
+                    {r.legacyCategories.map(c => (
+                      <Badge key={c} title={c} size="xs" variant="light" color="gray" styles={{ label: { textTransform: 'none' } }}>{c.split('/').slice(-1)[0]}</Badge>
                     ))}
                   </Group>
                 )}
